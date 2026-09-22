@@ -1,0 +1,40 @@
+@page "/salon"
+@using BarberHub.Client.Models
+@inject HttpClient Http
+<h3>SalonList</h3>
+@if (_salonResponses is null)
+{
+    <p>is loading...</p>
+}
+else if (_salonResponses.Count == 0)
+{
+    <p>salon not found</p>
+}
+else
+{
+    <ul>
+        @foreach (var sr in _salonResponses)
+        {
+            <li>@sr.Name - @sr.City</li>
+        }
+    </ul>
+}
+@code {
+    private List<SalonResponse>? _salonResponses;
+    private string? _error;
+    protected override async Task OnInitializedAsync()
+    {
+
+    try
+    {
+    var result = await Http.GetFromJsonAsync<ApiResult<List<SalonResponse>>>("salon");
+    _salonResponses = result?.Data ?? [];
+    }
+    catch (Exception ex)
+    {
+    _error = ex.Message;
+    }
+
+    }
+
+}
