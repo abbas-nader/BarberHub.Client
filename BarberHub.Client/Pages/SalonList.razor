@@ -1,40 +1,120 @@
 @page "/salon"
 @using BarberHub.Client.Models
 @inject HttpClient Http
-<h3>SalonList</h3>
-@if (_salonResponses is null)
-{
-    <p>is loading...</p>
-}
-else if (_salonResponses.Count == 0)
-{
-    <p>salon not found</p>
-}
-else
-{
-    <ul>
-        @foreach (var sr in _salonResponses)
-        {
-            <li>@sr.Name - @sr.City</li>
-        }
-    </ul>
-}
+
+<PageTitle>سالن‌ها | BarberHub</PageTitle>
+
+<section class="salon-page">
+    <header class="salon-page__header">
+        <h1 class="salon-page__title">سالن‌های ثبت‌شده</h1>
+        <p class="salon-page__subtitle">
+            یکی از سالن‌های زیر را برای مشاهده جزئیات و رزرو نوبت انتخاب کنید.
+        </p>
+    </header>
+
+    @if (_error is not null)
+    {
+        <div class="salon-alert" role="alert">
+            <span class="salon-alert__icon" aria-hidden="true">!</span>
+            <div class="salon-alert__body">
+                <strong>خطا در دریافت اطلاعات</strong>
+                <p>@_error</p>
+            </div>
+            <button class="salon-alert__retry" @onclick="LoadSalonsAsync">تلاش مجدد</button>
+        </div>
+    }
+    else if (_salonResponses is null)
+    {
+        <div class="salon-grid" aria-busy="true" aria-live="polite">
+            @for (var i = 0; i < 6; i++)
+            {
+                <div class="salon-card salon-card--skeleton">
+                    <div class="skeleton skeleton--avatar"></div>
+                    <div class="skeleton skeleton--line skeleton--title"></div>
+                    <div class="skeleton skeleton--line"></div>
+                    <div class="skeleton skeleton--line skeleton--short"></div>
+                </div>
+            }
+        </div>
+    }
+    else if (_salonResponses.Count == 0)
+    {
+        <div class="salon-empty">
+            <span class="salon-empty__icon" aria-hidden="true">✂</span>
+            <h2>سالنی یافت نشد</h2>
+            <p>در حال حاضر هیچ سالنی ثبت نشده است.</p>
+        </div>
+    }
+    else
+    {
+        <div class="salon-grid">
+            @foreach (var salon in _salonResponses)
+            {
+                <article class="salon-card" tabindex="0">
+                    <div class="salon-card__header">
+                        <div class="salon-card__avatar" aria-hidden="true">@GetInitials(salon.Name)</div>
+                        <span class="salon-badge @(salon.IsActive ? "salon-badge--active" : "salon-badge--inactive")">
+                            @(salon.IsActive ? "فعال" : "غیرفعال")
+                        </span>
+                    </div>
+
+                    <h2 class="salon-card__name">@salon.Name</h2>
+
+                    <p class="salon-card__meta">
+                        <span class="salon-card__icon" aria-hidden="true">📍</span>
+                        <span>@salon.City، @salon.Address</span>
+                    </p>
+
+                    <p class="salon-card__meta">
+                        <span class="salon-card__icon" aria-hidden="true">📞</span>
+                        <span dir="ltr" class="salon-card__phone">@salon.PhoneNumber</span>
+                    </p>
+
+                    @if (!string.IsNullOrWhiteSpace(salon.Description))
+                    {
+                        <p class="salon-card__description">@salon.Description</p>
+                    }
+
+                    <div class="salon-card__footer">
+                        <span class="salon-card__deposit-label">بیعانه رزرو</span>
+                        <span class="salon-card__deposit-value">@FormatDeposit(salon.DepositAmountValue)</span>
+                    </div>
+                </article>
+            }
+        </div>
+    }
+</section>
+
 @code {
     private List<SalonResponse>? _salonResponses;
     private string? _error;
-    protected override async Task OnInitializedAsync()
-    {
 
-    try
+    protected override async Task OnInitializedAsync() => await LoadSalonsAsync();
+
+    private async Task LoadSalonsAsync()
     {
-    var result = await Http.GetFromJsonAsync<ApiResult<List<SalonResponse>>>("salon");
-    _salonResponses = result?.Data ?? [];
-    }
-    catch (Exception ex)
-    {
-    _error = ex.Message;
+        _error = null;
+        _salonResponses = null;
+        StateHasChanged();
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<ApiResult<List<SalonResponse>>>("salon");
+            _salonResponses = result?.Data ?? [];
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
     }
 
+    private static string GetInitials(string name)
+    {
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 0
+            ? "?"
+            : string.Concat(parts.Take(2).Select(p => char.ToUpperInvariant(p[0])));
     }
 
+    private static string FormatDeposit(decimal value) => $"{value:N0} ریال";
 }

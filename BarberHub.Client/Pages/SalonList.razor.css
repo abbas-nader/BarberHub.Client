@@ -1,0 +1,314 @@
+/* ===== Design tokens (scoped to this component) ===== */
+.salon-page {
+    --color-bg: #f6f7fb;
+    --color-surface: #ffffff;
+    --color-border: #e6e8f0;
+    --color-text: #1c1f2e;
+    --color-text-muted: #6b7280;
+    --color-primary: #4338ca;
+    --color-primary-dark: #3730a3;
+    --color-primary-soft: #eef0ff;
+    --color-success: #15803d;
+    --color-success-soft: #dcfce7;
+    --color-danger: #b91c1c;
+    --color-danger-soft: #fee2e2;
+
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-7: 48px;
+
+    --radius-md: 12px;
+    --radius-lg: 18px;
+
+    --shadow-sm: 0 1px 2px rgba(17, 20, 45, 0.06);
+    --shadow-md: 0 8px 24px rgba(17, 20, 45, 0.08);
+    --shadow-lg: 0 16px 40px rgba(17, 20, 45, 0.14);
+
+    direction: rtl;
+    font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+    color: var(--color-text);
+    display: block;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: var(--space-6) var(--space-5) var(--space-7);
+}
+
+/* ===== Header ===== */
+.salon-page__header {
+    margin-bottom: var(--space-6);
+}
+
+.salon-page__title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0 0 var(--space-2);
+    letter-spacing: -0.01em;
+}
+
+.salon-page__subtitle {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 0.95rem;
+}
+
+/* ===== Grid ===== */
+.salon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: var(--space-5);
+}
+
+/* ===== Card ===== */
+.salon-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    outline: none;
+}
+
+.salon-card:hover,
+.salon-card:focus-visible {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--color-primary);
+}
+
+.salon-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-2);
+}
+
+.salon-card__avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: var(--color-primary-soft);
+    color: var(--color-primary-dark);
+    font-weight: 700;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.salon-card__name {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.salon-card__meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+.salon-card__icon {
+    flex-shrink: 0;
+    font-size: 0.9rem;
+}
+
+.salon-card__phone {
+    unicode-bidi: plaintext;
+}
+
+.salon-card__description {
+    margin: var(--space-1) 0 0;
+    font-size: 0.88rem;
+    color: var(--color-text-muted);
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.salon-card__footer {
+    margin-top: var(--space-3);
+    padding-top: var(--space-3);
+    border-top: 1px dashed var(--color-border);
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.salon-card__deposit-label {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+
+.salon-card__deposit-value {
+    font-weight: 700;
+    color: var(--color-primary-dark);
+    font-size: 0.95rem;
+}
+
+/* ===== Badge ===== */
+.salon-badge {
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: var(--space-1) var(--space-3);
+    border-radius: 999px;
+}
+
+.salon-badge--active {
+    background: var(--color-success-soft);
+    color: var(--color-success);
+}
+
+.salon-badge--inactive {
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
+}
+
+/* ===== Skeleton (loading state) ===== */
+.salon-card--skeleton {
+    gap: var(--space-3);
+    pointer-events: none;
+}
+
+.skeleton {
+    background: linear-gradient(90deg, #eceef4 25%, #f6f7fb 37%, #eceef4 63%);
+    background-size: 400% 100%;
+    animation: skeleton-shimmer 1.4s ease infinite;
+    border-radius: var(--radius-md);
+}
+
+.skeleton--avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+}
+
+.skeleton--line {
+    height: 12px;
+    width: 100%;
+}
+
+.skeleton--title {
+    height: 18px;
+    width: 60%;
+    margin-top: var(--space-2);
+}
+
+.skeleton--short {
+    width: 40%;
+}
+
+@keyframes skeleton-shimmer {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+}
+
+/* ===== Empty state ===== */
+.salon-empty {
+    text-align: center;
+    padding: var(--space-7) var(--space-5);
+    background: var(--color-surface);
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-muted);
+}
+
+.salon-empty__icon {
+    font-size: 2.25rem;
+    display: block;
+    margin-bottom: var(--space-3);
+}
+
+.salon-empty h2 {
+    margin: 0 0 var(--space-1);
+    color: var(--color-text);
+    font-size: 1.1rem;
+}
+
+.salon-empty p {
+    margin: 0;
+}
+
+/* ===== Error alert ===== */
+.salon-alert {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    background: var(--color-danger-soft);
+    border: 1px solid #fca5a5;
+    color: var(--color-danger);
+    border-radius: var(--radius-md);
+    padding: var(--space-4) var(--space-5);
+}
+
+.salon-alert__icon {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--color-danger);
+    color: #fff;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.salon-alert__body {
+    flex: 1;
+}
+
+.salon-alert__body strong {
+    display: block;
+    margin-bottom: var(--space-1);
+}
+
+.salon-alert__body p {
+    margin: 0;
+    font-size: 0.88rem;
+}
+
+.salon-alert__retry {
+    border: 1px solid var(--color-danger);
+    background: transparent;
+    color: var(--color-danger);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-4);
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+}
+
+.salon-alert__retry:hover {
+    background: var(--color-danger);
+    color: #fff;
+}
+
+/* ===== Responsive ===== */
+@media (max-width: 480px) {
+    .salon-page {
+        padding: var(--space-5) var(--space-4) var(--space-6);
+    }
+
+    .salon-page__title {
+        font-size: 1.4rem;
+    }
+
+    .salon-grid {
+        grid-template-columns: 1fr;
+    }
+}
