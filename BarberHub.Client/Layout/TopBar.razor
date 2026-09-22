@@ -1,0 +1,31 @@
+<header class="top-bar">
+    <div class="top-bar__inner">
+        <a class="top-bar__brand" href="">
+            <span class="top-bar__logo" aria-hidden="true">✂</span>
+            BarberHub
+        </a>
+
+        <button class="top-bar__toggler"
+                type="button"
+                @onclick="ToggleMenu"
+                aria-label="باز و بسته کردن منو"
+                aria-expanded="@_isOpen.ToString().ToLowerInvariant()">
+            <span class="top-bar__toggler-bar"></span>
+            <span class="top-bar__toggler-bar"></span>
+            <span class="top-bar__toggler-bar"></span>
+        </button>
+
+        <nav class="top-bar__nav @(_isOpen ? "top-bar__nav--open" : "")">
+            <NavLink class="top-bar__link" href="" Match="NavLinkMatch.All" @onclick="CloseMenu">خانه</NavLink>
+            <NavLink class="top-bar__link" href="salon" @onclick="CloseMenu">سالن‌ها</NavLink>
+            <a class="top-bar__cta" href="#" @onclick="CloseMenu">ورود / ثبت‌نام</a>
+        </nav>
+    </div>
+</header>
+
+@code {
+    private bool _isOpen;
+
+    private void ToggleMenu() => _isOpen = !_isOpen;
+    private void CloseMenu() => _isOpen = false;
+}
