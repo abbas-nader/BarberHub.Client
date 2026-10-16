@@ -1,0 +1,28 @@
+<a class="card entity-card" href="@Href">
+    <div class="row">
+        <Avatar First="@FirstName" Last="@LastName" />
+        <div>
+            <h3 style="margin:0">@FirstName @LastName</h3>
+            @if (!IsActive)
+            {
+                <StatusBadge Active="false" />
+            }
+        </div>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(Description))
+    {
+        <p class="desc">@Description</p>
+    }
+    <div class="foot">
+        <span class="muted" style="font-size:14px">خدمات و ساعت کاری</span>
+        <span class="btn btn-ghost btn-sm">مشاهده</span>
+    </div>
+</a>
+
+@code {
+    [Parameter, EditorRequired] public string Href { get; set; } = "";
+    [Parameter] public string FirstName { get; set; } = "";
+    [Parameter] public string LastName { get; set; } = "";
+    [Parameter] public string? Description { get; set; }
+    [Parameter] public bool IsActive { get; set; } = true;
+}

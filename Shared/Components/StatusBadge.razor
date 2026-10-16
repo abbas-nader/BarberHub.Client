@@ -1,0 +1,7 @@
+<span class="badge @(Active ? "badge-on" : "badge-off")">@(Active ? OnText : OffText)</span>
+
+@code {
+    [Parameter] public bool Active { get; set; }
+    [Parameter] public string OnText { get; set; } = "فعال";
+    [Parameter] public string OffText { get; set; } = "غیرفعال";
+}

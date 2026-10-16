@@ -1,0 +1,172 @@
+@page "/admin/salons/{SalonId:long}"
+@attribute [Authorize(Roles = Roles.PlatformAdmin)]
+@inject SalonApi Salons
+@inject SalonAdminApi SalonAdmins
+@inject ToastService Toasts
+
+<PageTitle>مدیران سالن | مدیریت پلتفرم</PageTitle>
+
+<a href="admin" class="muted">→ همه‌ی سالن‌ها</a>
+
+@if (loading)
+{
+    <LoadingState />
+}
+else if (error is not null)
+{
+    <ErrorAlert Response="error" OnRetry="LoadAsync" />
+}
+else if (salon is not null)
+{
+    <PageHeader Eyebrow="سالن" Title="@salon.Name" Subtitle="@($"{salon.City}، {salon.Address}")">
+        <Actions>
+            <StatusBadge Active="salon.IsActive" />
+            <a class="btn btn-ghost" href="@($"salons/{salon.Id}")">نمای عمومی</a>
+            <button class="btn btn-primary" @onclick="() => OpenEditor(null)">+ مدیر سالن</button>
+        </Actions>
+    </PageHeader>
+
+    <section class="card">
+        <div class="card-title"><h2>مدیران این سالن</h2></div>
+        @if (admins.Count == 0)
+        {
+            <p class="muted">هنوز مدیری تعریف نشده. بدون مدیر، کسی نمی‌تواند آرایشگر و خدمات این سالن را مدیریت کند.</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="table">
+                    <thead><tr><th>نام</th><th>موبایل</th><th></th></tr></thead>
+                    <tbody>
+                        @foreach (var a in admins)
+                        {
+                            <tr @key="a.Id">
+                                <td><div class="row"><Avatar First="@a.FirstName" Last="@a.LastName" /><strong>@a.FirstName @a.LastName</strong></div></td>
+                                <td><span class="ltr">@a.MobileNumber</span></td>
+                                <td>
+                                    <div class="actions-cell">
+                                        <button class="btn btn-ghost btn-sm" @onclick="() => OpenEditor(a)">ویرایش</button>
+                                        <button class="btn btn-ghost btn-sm" style="color:var(--pole-red)" @onclick="() => toDelete = a">حذف</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+
+<Modal IsOpen="showCreate" Title="مدیر جدید سالن" OnClose="() => showCreate = false">
+    <ErrorAlert Response="formError" />
+    <EditForm Model="createForm" OnValidSubmit="CreateAsync" FormName="salon-admin-create">
+        <DataAnnotationsValidator />
+        <div class="form-grid">
+            <FormField Label="نام"><InputText @bind-Value="createForm.FirstName" /><ValidationMessage For="() => createForm.FirstName" /></FormField>
+            <FormField Label="نام خانوادگی"><InputText @bind-Value="createForm.LastName" /><ValidationMessage For="() => createForm.LastName" /></FormField>
+            <FormField Label="موبایل" Wide="true"><InputText @bind-Value="createForm.MobileNumber" dir="ltr" /><ValidationMessage For="() => createForm.MobileNumber" /></FormField>
+            <FormField Label="نام کاربری"><InputText @bind-Value="createForm.Username" dir="ltr" /><ValidationMessage For="() => createForm.Username" /></FormField>
+            <FormField Label="رمز عبور اولیه"><InputText type="password" @bind-Value="createForm.Password" autocomplete="new-password" /><ValidationMessage For="() => createForm.Password" /></FormField>
+        </div>
+        <div class="form-actions">
+            <button type="button" class="btn btn-ghost" @onclick="() => showCreate = false">انصراف</button>
+            <button type="submit" class="btn btn-primary" disabled="@saving">@(saving ? "در حال ثبت…" : "ایجاد")</button>
+        </div>
+    </EditForm>
+</Modal>
+
+<Modal IsOpen="editingId is not null" Title="ویرایش مدیر سالن" OnClose="() => editingId = null">
+    <ErrorAlert Response="formError" />
+    <EditForm Model="updateForm" OnValidSubmit="UpdateAsync" FormName="salon-admin-update">
+        <DataAnnotationsValidator />
+        <div class="form-grid">
+            <FormField Label="نام"><InputText @bind-Value="updateForm.FirstName" /><ValidationMessage For="() => updateForm.FirstName" /></FormField>
+            <FormField Label="نام خانوادگی"><InputText @bind-Value="updateForm.LastName" /><ValidationMessage For="() => updateForm.LastName" /></FormField>
+            <FormField Label="موبایل"><InputText @bind-Value="updateForm.MobileNumber" dir="ltr" /><ValidationMessage For="() => updateForm.MobileNumber" /></FormField>
+            <FormField Label="نام کاربری" Hint="API نام کاربری فعلی را برنمی‌گرداند."><InputText @bind-Value="updateForm.Username" dir="ltr" /><ValidationMessage For="() => updateForm.Username" /></FormField>
+        </div>
+        <div class="form-actions">
+            <button type="button" class="btn btn-ghost" @onclick="() => editingId = null">انصراف</button>
+            <button type="submit" class="btn btn-primary" disabled="@saving">ذخیره</button>
+        </div>
+    </EditForm>
+</Modal>
+
+<ConfirmDialog IsOpen="toDelete is not null" Title="حذف مدیر سالن" Danger="true" ConfirmText="حذف"
+               Message="@($"«{toDelete?.FirstName} {toDelete?.LastName}» حذف شود؟")" OnConfirm="DeleteAsync" OnCancel="() => toDelete = null" />
+
+@code {
+    [Parameter] public long SalonId { get; set; }
+
+    private SalonResponse? salon;
+    private List<SalonAdminResponse> admins = [];
+    private bool loading = true, showCreate, saving;
+    private long? editingId;
+    private SalonAdminResponse? toDelete;
+    private CreateSalonAdminRequest createForm = new();
+    private UpdateSalonAdminRequest updateForm = new();
+    private ApiResponse? error, formError;
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var sT = Salons.GetByIdAsync(SalonId);
+        var aT = SalonAdmins.GetBySalonAsync(SalonId);
+        await Task.WhenAll(sT, aT);
+        if (!sT.Result.Success) { error = sT.Result; loading = false; return; }
+        salon = sT.Result.Data;
+        admins = aT.Result.Data ?? [];
+        loading = false;
+    }
+
+    private void OpenEditor(SalonAdminResponse? a)
+    {
+        formError = null;
+        if (a is null)
+        {
+            createForm = new CreateSalonAdminRequest { SalonId = SalonId };
+            showCreate = true;
+        }
+        else
+        {
+            updateForm = new UpdateSalonAdminRequest { FirstName = a.FirstName, LastName = a.LastName, MobileNumber = a.MobileNumber };
+            editingId = a.Id;
+        }
+    }
+
+    private async Task CreateAsync()
+    {
+        saving = true; formError = null;
+        var res = await SalonAdmins.CreateAsync(createForm);
+        saving = false;
+        if (!res.Success) { formError = res; return; }
+        showCreate = false;
+        Toasts.Success("مدیر سالن ایجاد شد.");
+        await LoadAsync();
+    }
+
+    private async Task UpdateAsync()
+    {
+        if (editingId is null) return;
+        saving = true; formError = null;
+        var res = await SalonAdmins.UpdateAsync(editingId.Value, updateForm);
+        saving = false;
+        if (!res.Success) { formError = res; return; }
+        editingId = null;
+        Toasts.Success("ذخیره شد.");
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (toDelete is null) return;
+        var res = await SalonAdmins.DeleteAsync(toDelete.Id);
+        toDelete = null;
+        if (!res.Success) { Toasts.Error(res.ErrorMessage!); return; }
+        Toasts.Success("مدیر سالن حذف شد.");
+        await LoadAsync();
+    }
+}

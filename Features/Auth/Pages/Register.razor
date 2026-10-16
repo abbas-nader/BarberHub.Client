@@ -1,0 +1,74 @@
+@page "/register"
+@inject AuthService Auth
+@inject NavigationManager Nav
+@inject ToastService Toasts
+
+<PageTitle>ثبت‌نام | BarberHub</PageTitle>
+
+<div class="auth-wrap">
+    <div class="card auth-card">
+        <span class="eyebrow">حساب مشتری</span>
+        <h1>ثبت‌نام</h1>
+        <p class="muted">بعد از ثبت‌نام می‌توانید شماره موبایل خود را از «حساب من» تایید کنید.</p>
+
+        <ErrorAlert Response="error" />
+
+        <EditForm Model="model" OnValidSubmit="SubmitAsync" FormName="register">
+            <DataAnnotationsValidator />
+            <div class="form-grid">
+                <FormField Label="نام">
+                    <InputText @bind-Value="model.FirstName" autocomplete="given-name" />
+                    <ValidationMessage For="() => model.FirstName" />
+                </FormField>
+                <FormField Label="نام خانوادگی">
+                    <InputText @bind-Value="model.LastName" autocomplete="family-name" />
+                    <ValidationMessage For="() => model.LastName" />
+                </FormField>
+                <FormField Label="شماره موبایل" Wide="true">
+                    <InputText @bind-Value="model.MobileNumber" inputmode="tel" placeholder="09121234567" dir="ltr" />
+                    <ValidationMessage For="() => model.MobileNumber" />
+                </FormField>
+                <FormField Label="نام کاربری" Wide="true">
+                    <InputText @bind-Value="model.Username" autocomplete="username" dir="ltr" />
+                    <ValidationMessage For="() => model.Username" />
+                </FormField>
+                <FormField Label="رمز عبور" Wide="true">
+                    <InputText type="password" @bind-Value="model.Password" autocomplete="new-password" />
+                    <ValidationMessage For="() => model.Password" />
+                </FormField>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-block" disabled="@busy">
+                    @(busy ? "در حال ثبت…" : "ساخت حساب")
+                </button>
+            </div>
+        </EditForm>
+
+        <p class="muted" style="margin-top:16px">قبلا ثبت‌نام کرده‌اید؟ <a href="login">ورود</a></p>
+    </div>
+</div>
+
+@code {
+    private readonly RegisterRequest model = new();
+    private ApiResponse? error;
+    private bool busy;
+
+    private async Task SubmitAsync()
+    {
+        busy = true; error = null;
+        var res = await Auth.RegisterAsync(model);
+        busy = false;
+        if (!res.Success) { error = res; return; }
+
+        if (await Auth.IsLoggedInAsync())
+        {
+            Toasts.Success("حساب شما ساخته شد. خوش آمدید!");
+            Nav.NavigateTo("", replace: true);
+        }
+        else
+        {
+            Toasts.Success("حساب ساخته شد. حالا وارد شوید.");
+            Nav.NavigateTo("login", replace: true);
+        }
+    }
+}

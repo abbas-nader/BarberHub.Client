@@ -1,0 +1,116 @@
+@page "/admin/admins"
+@attribute [Authorize(Roles = Roles.PlatformAdmin)]
+@inject PlatformAdminApi Admins
+@inject ToastService Toasts
+
+<PageTitle>مدیران پلتفرم | مدیریت پلتفرم</PageTitle>
+
+<PageHeader Eyebrow="مدیریت پلتفرم" Title="مدیران پلتفرم" Subtitle="ویرایش اطلاعات خودتان از «حساب من» انجام می‌شود.">
+    <Actions>
+        <button class="btn btn-primary" @onclick="OpenCreate">+ مدیر جدید</button>
+    </Actions>
+</PageHeader>
+<AdminTabs />
+
+@if (loading)
+{
+    <LoadingState />
+}
+else if (error is not null)
+{
+    <ErrorAlert Response="error" OnRetry="LoadAsync" />
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>نام</th><th>نام کاربری</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var a in admins)
+                {
+                    <tr @key="a.Id">
+                        <td><div class="row"><Avatar First="@a.FirstName" Last="@a.LastName" /><strong>@a.FirstName @a.LastName</strong>
+                            @if (a.Id == myId) { <span class="badge badge-on">شما</span> }</div></td>
+                        <td><span class="ltr">@a.UserName</span></td>
+                        <td>
+                            <div class="actions-cell">
+                                @if (a.Id != myId)
+                                {
+                                    <button class="btn btn-ghost btn-sm" style="color:var(--pole-red)" @onclick="() => toDelete = a">حذف</button>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<Modal IsOpen="showCreate" Title="مدیر پلتفرم جدید" OnClose="() => showCreate = false">
+    <ErrorAlert Response="createError" />
+    <EditForm Model="form" OnValidSubmit="CreateAsync" FormName="pa-create">
+        <DataAnnotationsValidator />
+        <div class="form-grid">
+            <FormField Label="نام"><InputText @bind-Value="form.FirstName" /><ValidationMessage For="() => form.FirstName" /></FormField>
+            <FormField Label="نام خانوادگی"><InputText @bind-Value="form.LastName" /><ValidationMessage For="() => form.LastName" /></FormField>
+            <FormField Label="نام کاربری"><InputText @bind-Value="form.UserName" dir="ltr" /><ValidationMessage For="() => form.UserName" /></FormField>
+            <FormField Label="رمز عبور اولیه"><InputText type="password" @bind-Value="form.Password" autocomplete="new-password" /><ValidationMessage For="() => form.Password" /></FormField>
+        </div>
+        <div class="form-actions">
+            <button type="button" class="btn btn-ghost" @onclick="() => showCreate = false">انصراف</button>
+            <button type="submit" class="btn btn-primary" disabled="@creating">@(creating ? "در حال ثبت…" : "ایجاد")</button>
+        </div>
+    </EditForm>
+</Modal>
+
+<ConfirmDialog IsOpen="toDelete is not null" Title="حذف مدیر پلتفرم" Danger="true" ConfirmText="حذف"
+               Message="@($"«{toDelete?.FirstName} {toDelete?.LastName}» حذف شود؟")" OnConfirm="DeleteAsync" OnCancel="() => toDelete = null" />
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private List<PlatformAdminResponse> admins = [];
+    private long? myId;
+    private bool loading = true, showCreate, creating;
+    private PlatformAdminResponse? toDelete;
+    private CreatePlatformAdminRequest form = new();
+    private ApiResponse? error, createError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        myId = (await AuthState).User.UserId();
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var res = await Admins.GetAllAsync();
+        if (res.Success) admins = res.Data ?? []; else error = res;
+        loading = false;
+    }
+
+    private void OpenCreate() { form = new(); createError = null; showCreate = true; }
+
+    private async Task CreateAsync()
+    {
+        creating = true; createError = null;
+        var res = await Admins.CreateAsync(form);
+        creating = false;
+        if (!res.Success) { createError = res; return; }
+        showCreate = false;
+        Toasts.Success("مدیر پلتفرم ایجاد شد.");
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (toDelete is null) return;
+        var res = await Admins.DeleteAsync(toDelete.Id);
+        toDelete = null;
+        if (!res.Success) { Toasts.Error(res.ErrorMessage!); return; }
+        Toasts.Success("حذف شد.");
+        await LoadAsync();
+    }
+}

@@ -1,0 +1,25 @@
+<a class="card entity-card salon-card @(Salon.IsActive ? "" : "inactive")" href="@($"salons/{Salon.Id}")">
+    <div class="row spread">
+        <h3 style="margin:0">@Salon.Name</h3>
+        @if (!Salon.IsActive)
+        {
+            <StatusBadge Active="false" />
+        }
+    </div>
+    <div class="meta">
+        <span>📍 @Salon.City، @Salon.Address</span>
+        <span>☎ <span class="ltr">@Salon.PhoneNumber</span></span>
+    </div>
+    @if (!string.IsNullOrWhiteSpace(Salon.Description))
+    {
+        <p class="desc">@Salon.Description</p>
+    }
+    <div class="foot">
+        <span class="muted" style="font-size:14px">بیعانه: <strong>@Fmt.Money(Salon.DepositAmountValue, Salon.DepositAmountCurrency)</strong></span>
+        <span class="btn btn-ghost btn-sm">مشاهده</span>
+    </div>
+</a>
+
+@code {
+    [Parameter, EditorRequired] public SalonResponse Salon { get; set; } = default!;
+}

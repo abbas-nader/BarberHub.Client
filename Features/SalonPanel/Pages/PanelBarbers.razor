@@ -1,0 +1,141 @@
+@page "/panel/barbers"
+@attribute [Authorize(Roles = Roles.SalonAdmin)]
+@inherits SalonPanelPageBase
+@inject BarberApi Barbers
+@inject ToastService Toasts
+@inject NavigationManager Nav
+
+<PageTitle>آرایشگرها | پنل سالن</PageTitle>
+
+@if (MissingSalon)
+{
+    <MissingSalonNotice />
+}
+else
+{
+    <PageHeader Eyebrow="پنل مدیر سالن" Title="آرایشگرها" Subtitle="افزودن، فعال/غیرفعال کردن و مدیریت خدمات و ساعت کاری هر آرایشگر.">
+        <Actions>
+            <button class="btn btn-primary" @onclick="OpenCreate">+ آرایشگر جدید</button>
+        </Actions>
+    </PageHeader>
+    <PanelTabs />
+
+    @if (loading)
+    {
+        <LoadingState />
+    }
+    else if (error is not null)
+    {
+        <ErrorAlert Response="error" OnRetry="LoadAsync" />
+    }
+    else if (barbers.Count == 0)
+    {
+        <EmptyState Icon="💈" Title="هنوز آرایشگری ندارید" Text="اولین آرایشگر سالن را اضافه کنید.">
+            <button class="btn btn-primary" @onclick="OpenCreate">افزودن آرایشگر</button>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>آرایشگر</th><th>موبایل</th><th>وضعیت</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var b in barbers)
+                    {
+                        <tr class="clickable" @key="b.Id" @onclick="@(() => Nav.NavigateTo(BarberHref(b.Id)))">
+                            <td>
+                                <div class="row"><Avatar First="@b.FirstName" Last="@b.LastName" /><div><strong>@b.FirstName @b.LastName</strong><div class="muted" style="font-size:14px">@b.Description</div></div></div>
+                            </td>
+                            <td><span class="ltr">@b.MobileNumber</span></td>
+                            <td><StatusBadge Active="b.IsActive" /></td>
+                            <td @onclick:stopPropagation="true">
+                                <div class="actions-cell">
+                                    <a class="btn btn-ghost btn-sm" href="@($"panel/barbers/{b.Id}")">مدیریت</a>
+                                    <button class="btn btn-ghost btn-sm" disabled="@(busyId == b.Id)" @onclick="() => ToggleAsync(b)">@(b.IsActive ? "غیرفعال" : "فعال")</button>
+                                    <button class="btn btn-ghost btn-sm" style="color:var(--pole-red)" @onclick="() => toDelete = b">حذف</button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+
+    <Modal IsOpen="showCreate" Title="آرایشگر جدید" OnClose="() => showCreate = false">
+        <ErrorAlert Response="createError" />
+        <EditForm Model="form" OnValidSubmit="CreateAsync" FormName="barber-create" id="barber-create">
+            <DataAnnotationsValidator />
+            <div class="form-grid">
+                <FormField Label="نام"><InputText @bind-Value="form.FirstName" /><ValidationMessage For="() => form.FirstName" /></FormField>
+                <FormField Label="نام خانوادگی"><InputText @bind-Value="form.LastName" /><ValidationMessage For="() => form.LastName" /></FormField>
+                <FormField Label="موبایل" Wide="true"><InputText @bind-Value="form.MobileNumber" dir="ltr" inputmode="tel" /><ValidationMessage For="() => form.MobileNumber" /></FormField>
+                <FormField Label="نام کاربری"><InputText @bind-Value="form.Username" dir="ltr" /><ValidationMessage For="() => form.Username" /></FormField>
+                <FormField Label="رمز عبور اولیه"><InputText type="password" @bind-Value="form.Password" autocomplete="new-password" /><ValidationMessage For="() => form.Password" /></FormField>
+                <FormField Label="معرفی کوتاه" Wide="true"><InputTextArea @bind-Value="form.Description" /></FormField>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-ghost" @onclick="() => showCreate = false">انصراف</button>
+                <button type="submit" class="btn btn-primary" disabled="@creating">@(creating ? "در حال ثبت…" : "افزودن")</button>
+            </div>
+        </EditForm>
+    </Modal>
+
+    <ConfirmDialog IsOpen="toDelete is not null" Title="حذف آرایشگر" Danger="true" ConfirmText="حذف"
+                   Message="@($"«{toDelete?.FirstName} {toDelete?.LastName}» حذف شود؟")"
+                   OnConfirm="DeleteAsync" OnCancel="() => toDelete = null" />
+}
+
+@code {
+    private List<BarberResponse> barbers = [];
+    private bool loading = true, showCreate, creating;
+    private long? busyId;
+    private BarberResponse? toDelete;
+    private ApiResponse? error, createError;
+    private CreateBarberRequest form = new();
+
+    protected override async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var res = await Barbers.GetBySalonAsync(SalonId);
+        if (res.Success) barbers = (res.Data ?? []).OrderByDescending(b => b.IsActive).ThenBy(b => b.LastName).ToList();
+        else error = res;
+        loading = false;
+    }
+
+    private static string BarberHref(long id) => $"panel/barbers/{id}";
+
+    private void OpenCreate() { form = new(); createError = null; showCreate = true; }
+
+    private async Task CreateAsync()
+    {
+        creating = true; createError = null;
+        var res = await Barbers.CreateAsync(form);
+        creating = false;
+        if (!res.Success) { createError = res; return; }
+        showCreate = false;
+        Toasts.Success("آرایشگر اضافه شد. حالا خدمات و ساعت کاری‌اش را تنظیم کنید.");
+        if (res.Data is not null) Nav.NavigateTo($"panel/barbers/{res.Data.Id}");
+        else await LoadAsync();
+    }
+
+    private async Task ToggleAsync(BarberResponse b)
+    {
+        busyId = b.Id;
+        var res = b.IsActive ? await Barbers.DeactivateAsync(b.Id) : await Barbers.ActivateAsync(b.Id);
+        busyId = null;
+        if (!res.Success) { Toasts.Error(res.ErrorMessage!); return; }
+        Toasts.Success(b.IsActive ? "آرایشگر غیرفعال شد." : "آرایشگر فعال شد.");
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (toDelete is null) return;
+        var res = await Barbers.DeleteAsync(toDelete.Id);
+        toDelete = null;
+        if (!res.Success) { Toasts.Error(res.ErrorMessage!); return; }
+        Toasts.Success("آرایشگر حذف شد.");
+        await LoadAsync();
+    }
+}

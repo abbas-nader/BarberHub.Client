@@ -1,0 +1,12 @@
+<SectionTabs Label="پنل سالن" Items="items" />
+
+@code {
+    private static readonly IReadOnlyList<SectionTabs.TabItem> items =
+    [
+        new("خلاصه", "panel", true),
+        new("آرایشگرها", "panel/barbers"),
+        new("خدمات", "panel/services"),
+        new("گالری", "panel/gallery"),
+        new("تنظیمات سالن", "panel/settings"),
+    ];
+}

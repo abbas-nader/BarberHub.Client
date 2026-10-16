@@ -1,0 +1,36 @@
+@* خطای فرم/صفحه. یا Response ناموفق بده، یا Message مستقیم. *@
+@if (!string.IsNullOrWhiteSpace(ShownMessage))
+{
+    <div class="alert alert-error" role="alert">
+        <span class="alert-icon">!</span>
+        <div class="alert-body">
+            <strong>@ShownMessage</strong>
+            @if (ShownFields is { Count: > 0 })
+            {
+                <ul>
+                    @foreach (var f in ShownFields)
+                    {
+                        foreach (var m in f.Value)
+                        {
+                            <li>@m</li>
+                        }
+                    }
+                </ul>
+            }
+        </div>
+        @if (OnRetry.HasDelegate)
+        {
+            <button class="btn btn-ghost btn-sm" @onclick="OnRetry">تلاش دوباره</button>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string? Message { get; set; }
+    [Parameter] public IReadOnlyDictionary<string, string[]>? Fields { get; set; }
+    [Parameter] public ApiResponse? Response { get; set; }
+    [Parameter] public EventCallback OnRetry { get; set; }
+
+    private string? ShownMessage => Response is { Success: false } ? Response.ErrorMessage : Message;
+    private IReadOnlyDictionary<string, string[]>? ShownFields => Response is { Success: false } ? Response.FieldErrors : Fields;
+}

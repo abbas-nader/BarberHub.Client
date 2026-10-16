@@ -1,0 +1,70 @@
+@page "/admin/users"
+@attribute [Authorize(Roles = Roles.PlatformAdmin)]
+@inject EndUserApi EndUsers
+
+<PageTitle>مشتری‌ها | مدیریت پلتفرم</PageTitle>
+
+<PageHeader Eyebrow="مدیریت پلتفرم" Title="مشتری‌ها" />
+<AdminTabs />
+
+@if (loading)
+{
+    <LoadingState />
+}
+else if (error is not null)
+{
+    <ErrorAlert Response="error" OnRetry="LoadAsync" />
+}
+else
+{
+    <div class="row spread" style="margin-bottom:16px">
+        <input placeholder="جستجوی نام، نام کاربری یا موبایل…" @bind="q" @bind:event="oninput" style="max-width:360px" />
+        <span class="muted">@Filtered.Count مشتری · @users.Count(u => u.IsMobileVerified == true) موبایل تاییدشده</span>
+    </div>
+
+    @if (Filtered.Count == 0)
+    {
+        <EmptyState Icon="👤" Title="مشتری‌ای پیدا نشد" />
+    }
+    else
+    {
+        <div class="table-wrap">
+            <table class="table">
+                <thead><tr><th>نام</th><th>نام کاربری</th><th>موبایل</th><th>تایید موبایل</th></tr></thead>
+                <tbody>
+                    @foreach (var u in Filtered)
+                    {
+                        <tr @key="u.Id">
+                            <td><div class="row"><Avatar First="@u.FirstName" Last="@u.LastName" /><strong>@u.FirstName @u.LastName</strong></div></td>
+                            <td><span class="ltr">@u.UserName</span></td>
+                            <td><span class="ltr">@(u.MobileNumber ?? "—")</span></td>
+                            <td><StatusBadge Active="@(u.IsMobileVerified == true)" OnText="تایید شده" OffText="تایید نشده" /></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    private List<EndUserResponse> users = [];
+    private string q = "";
+    private bool loading = true;
+    private ApiResponse? error;
+
+    private List<EndUserResponse> Filtered => users.Where(u => string.IsNullOrWhiteSpace(q)
+        || $"{u.FirstName} {u.LastName}".Contains(q, StringComparison.OrdinalIgnoreCase)
+        || u.UserName.Contains(q, StringComparison.OrdinalIgnoreCase)
+        || (u.MobileNumber ?? "").Contains(q)).ToList();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var res = await EndUsers.GetAllAsync();
+        if (res.Success) users = res.Data ?? []; else error = res;
+        loading = false;
+    }
+}

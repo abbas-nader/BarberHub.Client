@@ -1,0 +1,129 @@
+@page "/salons/{SalonId:long}"
+@inject SalonApi Salons
+@inject BarberApi Barbers
+@inject ServiceCatalogApi Catalog
+@inject GalleryApi Gallery
+@inject FileApi Files
+
+<PageTitle>@(salon?.Name ?? "سالن") | BarberHub</PageTitle>
+
+@if (loading)
+{
+    <LoadingState Text="در حال دریافت اطلاعات سالن…" />
+}
+else if (error is not null)
+{
+    <ErrorAlert Response="error" OnRetry="LoadAsync" />
+    <a href="">← بازگشت به سالن‌ها</a>
+}
+else if (salon is not null)
+{
+    <section class="detail-hero">
+        <span class="eyebrow" style="color:#9cc6e3">سالن آرایش</span>
+        <h1>@salon.Name <StatusBadge Active="salon.IsActive" /></h1>
+        @if (!string.IsNullOrWhiteSpace(salon.Description))
+        {
+            <p style="max-width:60ch;color:rgba(255,255,255,.85)">@salon.Description</p>
+        }
+        <div class="facts">
+            <span>📍 <strong>@salon.City</strong>، @salon.Address</span>
+            <span>☎ <strong class="ltr">@salon.PhoneNumber</strong></span>
+            <span>بیعانه‌ی رزرو: <strong>@Fmt.Money(salon.DepositAmountValue, salon.DepositAmountCurrency)</strong></span>
+        </div>
+    </section>
+
+    <div class="grid-2">
+        <section class="card">
+            <div class="card-title"><h2>آرایشگرها</h2><span class="muted">@activeBarbers.Count نفر</span></div>
+            @if (activeBarbers.Count == 0)
+            {
+                <p class="muted">هنوز آرایشگری برای این سالن ثبت نشده است.</p>
+            }
+            else
+            {
+                <div class="stack">
+                    @foreach (var b in activeBarbers)
+                    {
+                        <BarberCard Href="@($"salons/{SalonId}/barbers/{b.Id}")" FirstName="@b.FirstName" LastName="@b.LastName"
+                                    Description="@b.Description" IsActive="b.IsActive" @key="b.Id" />
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="card">
+            <div class="card-title"><h2>خدمات سالن</h2></div>
+            @if (services.Count == 0)
+            {
+                <p class="muted">خدمتی ثبت نشده است.</p>
+            }
+            else
+            {
+                <ul class="menu-list">
+                    @foreach (var s in services)
+                    {
+                        <li class="menu-item">
+                            <span class="name">@s.Name<span class="sub">@s.Description</span></span>
+                        </li>
+                    }
+                </ul>
+                <p class="hint" style="margin-top:12px">قیمت و مدت هر خدمت به آرایشگر بستگی دارد؛ روی آرایشگر بزنید.</p>
+            }
+        </section>
+    </div>
+
+    <section class="card" style="margin-top:16px">
+        <div class="card-title"><h2>گالری</h2></div>
+        <GalleryGrid Items="gallery" ImageUrls="imageUrls" />
+    </section>
+}
+
+@code {
+    [Parameter] public long SalonId { get; set; }
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private SalonResponse? salon;
+    private List<BarberPublicResponse> activeBarbers = [];
+    private List<ServiceResponse> services = [];
+    private List<GalleryResponse> gallery = [];
+    private Dictionary<long, string> imageUrls = new();
+    private bool loading = true;
+    private ApiResponse? error;
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var user = (await AuthState).User;
+
+        // درخواست‌های مستقل را موازی می‌فرستیم
+        var salonTask = Salons.GetPublicAsync(SalonId, user.Identity?.IsAuthenticated == true);
+        var barbersTask = Barbers.GetPublicBySalonAsync(SalonId);
+        var servicesTask = Catalog.GetBySalonAsync(SalonId);
+        var galleryTask = Gallery.GetBySalonAsync(SalonId);
+        await Task.WhenAll(salonTask, barbersTask, servicesTask, galleryTask);
+
+        var s = salonTask.Result;
+        if (!s.Success) { error = s; loading = false; return; }
+        salon = s.Data;
+
+        activeBarbers = (barbersTask.Result.Data ?? []).Where(b => b.IsActive).ToList();
+        services = servicesTask.Result.Data ?? [];
+        gallery = galleryTask.Result.Data ?? [];
+
+        // FileController فقط برای SalonAdmin باز است؛ برای بقیه placeholder نمایش داده می‌شود
+        if (user.IsInRole(Roles.SalonAdmin) && user.SalonId() == SalonId)
+            imageUrls = await LoadImagesAsync(gallery);
+
+        loading = false;
+    }
+
+    private async Task<Dictionary<long, string>> LoadImagesAsync(IEnumerable<GalleryResponse> items)
+    {
+        var tasks = items.Select(async g => (g.FileId, res: await Files.GetByIdAsync(g.FileId)));
+        var results = await Task.WhenAll(tasks);
+        return results.Where(r => r.res.Success && r.res.Data is not null)
+                      .ToDictionary(r => r.FileId, r => r.res.Data!.Url);
+    }
+}

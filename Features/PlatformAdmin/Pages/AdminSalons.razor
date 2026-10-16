@@ -1,0 +1,143 @@
+@page "/admin"
+@page "/admin/salons"
+@attribute [Authorize(Roles = Roles.PlatformAdmin)]
+@inject SalonApi Salons
+@inject ToastService Toasts
+@inject NavigationManager Nav
+
+<PageTitle>سالن‌ها | مدیریت پلتفرم</PageTitle>
+
+<PageHeader Eyebrow="مدیریت پلتفرم" Title="سالن‌ها" Subtitle="ایجاد سالن، فعال/غیرفعال‌سازی و تعیین مدیر هر سالن.">
+    <Actions>
+        <button class="btn btn-primary" @onclick="OpenCreate">+ سالن جدید</button>
+    </Actions>
+</PageHeader>
+<AdminTabs />
+
+@if (loading)
+{
+    <LoadingState />
+}
+else if (error is not null)
+{
+    <ErrorAlert Response="error" OnRetry="LoadAsync" />
+}
+else if (salonPage is null || salonPage.Items.Count == 0)
+{
+    <EmptyState Icon="🏪" Title="هنوز سالنی ثبت نشده" />
+}
+else
+{
+    <div class="stats">
+        <div class="stat"><div class="num">@salonPage.TotalCount</div><div class="lbl">کل سالن‌ها</div></div>
+    </div>
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>نام</th><th>شهر</th><th>تلفن</th><th>بیعانه</th><th>وضعیت</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var s in salonPage.Items)
+                {
+                    <tr class="clickable" @key="s.Id" @onclick="@(() => Nav.NavigateTo(SalonHref(s.Id)))">
+                        <td><strong>@s.Name</strong></td>
+                        <td>@s.City</td>
+                        <td><span class="ltr">@s.PhoneNumber</span></td>
+                        <td>@Fmt.Money(s.DepositAmountValue, s.DepositAmountCurrency)</td>
+                        <td><StatusBadge Active="s.IsActive" /></td>
+                        <td @onclick:stopPropagation="true">
+                            <div class="actions-cell">
+                                <a class="btn btn-ghost btn-sm" href="@($"admin/salons/{s.Id}")">مدیران</a>
+                                <button class="btn btn-ghost btn-sm" disabled="@(busyId == s.Id)" @onclick="() => ToggleAsync(s)">@(s.IsActive ? "غیرفعال" : "فعال")</button>
+                                <button class="btn btn-ghost btn-sm" style="color:var(--pole-red)" @onclick="() => toDelete = s">حذف</button>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="pager">
+        <button class="btn btn-ghost btn-sm" disabled="@(pageNumber <= 1)" @onclick="() => GoAsync(pageNumber - 1)">قبلی</button>
+        <span>صفحه @salonPage.PageNumber از @Math.Max(1, salonPage.TotalPages)</span>
+        <button class="btn btn-ghost btn-sm" disabled="@(pageNumber >= salonPage.TotalPages)" @onclick="() => GoAsync(pageNumber + 1)">بعدی</button>
+    </div>
+}
+
+<Modal IsOpen="showCreate" Title="سالن جدید" OnClose="() => showCreate = false">
+    <ErrorAlert Response="createError" />
+    <EditForm Model="form" OnValidSubmit="CreateAsync" FormName="salon-create">
+        <DataAnnotationsValidator />
+        <div class="form-grid">
+            <FormField Label="نام سالن" Wide="true"><InputText @bind-Value="form.Name" /><ValidationMessage For="() => form.Name" /></FormField>
+            <FormField Label="شهر"><InputText @bind-Value="form.City" /><ValidationMessage For="() => form.City" /></FormField>
+            <FormField Label="تلفن"><InputText @bind-Value="form.PhoneNumber" dir="ltr" /><ValidationMessage For="() => form.PhoneNumber" /></FormField>
+            <FormField Label="آدرس" Wide="true"><InputText @bind-Value="form.Address" /><ValidationMessage For="() => form.Address" /></FormField>
+            <FormField Label="بیعانه (ریال)" Hint="@Fmt.Money(form.DepositAmountValue)"><InputNumber @bind-Value="form.DepositAmountValue" dir="ltr" /></FormField>
+            <FormField Label="توضیحات" Wide="true"><InputTextArea @bind-Value="form.Description" /></FormField>
+        </div>
+        <div class="form-actions">
+            <button type="button" class="btn btn-ghost" @onclick="() => showCreate = false">انصراف</button>
+            <button type="submit" class="btn btn-primary" disabled="@creating">@(creating ? "در حال ثبت…" : "ایجاد سالن")</button>
+        </div>
+    </EditForm>
+</Modal>
+
+<ConfirmDialog IsOpen="toDelete is not null" Title="حذف سالن" Danger="true" ConfirmText="حذف"
+               Message="@($"سالن «{toDelete?.Name}» حذف شود؟")" OnConfirm="DeleteAsync" OnCancel="() => toDelete = null" />
+
+@code {
+    private const int PageSize = 20;
+    private PaginatedResponse<SalonResponse>? salonPage;
+    private int pageNumber = 1;
+    private bool loading = true, showCreate, creating;
+    private long? busyId;
+    private SalonResponse? toDelete;
+    private CreateSalonRequest form = new();
+    private ApiResponse? error, createError;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var res = await Salons.GetPaginatedAsync(pageNumber, PageSize);
+        if (res.Success) salonPage = res.Data; else error = res;
+        loading = false;
+    }
+
+    private async Task GoAsync(int n) { pageNumber = n; await LoadAsync(); }
+
+    private static string SalonHref(long id) => $"admin/salons/{id}";
+
+    private void OpenCreate() { form = new(); createError = null; showCreate = true; }
+
+    private async Task CreateAsync()
+    {
+        creating = true; createError = null;
+        var res = await Salons.CreateAsync(form);
+        creating = false;
+        if (!res.Success) { createError = res; return; }
+        showCreate = false;
+        Toasts.Success("سالن ایجاد شد. حالا یک مدیر برایش تعریف کنید.");
+        if (res.Data is not null) Nav.NavigateTo($"admin/salons/{res.Data.Id}"); else await LoadAsync();
+    }
+
+    private async Task ToggleAsync(SalonResponse s)
+    {
+        busyId = s.Id;
+        var res = s.IsActive ? await Salons.DeactivateAsync(s.Id) : await Salons.ActivateAsync(s.Id);
+        busyId = null;
+        if (!res.Success) { Toasts.Error(res.ErrorMessage!); return; }
+        Toasts.Success(s.IsActive ? "سالن غیرفعال شد." : "سالن فعال شد.");
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (toDelete is null) return;
+        var res = await Salons.DeleteAsync(toDelete.Id);
+        toDelete = null;
+        if (!res.Success) { Toasts.Error(res.ErrorMessage!); return; }
+        Toasts.Success("سالن حذف شد.");
+        await LoadAsync();
+    }
+}

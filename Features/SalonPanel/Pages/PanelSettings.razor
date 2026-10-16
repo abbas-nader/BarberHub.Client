@@ -1,0 +1,100 @@
+@page "/panel/settings"
+@attribute [Authorize(Roles = Roles.SalonAdmin)]
+@inherits SalonPanelPageBase
+@inject SalonApi Salons
+@inject ToastService Toasts
+
+<PageTitle>تنظیمات سالن | BarberHub</PageTitle>
+
+@if (MissingSalon)
+{
+    <MissingSalonNotice />
+}
+else
+{
+    <PageHeader Eyebrow="پنل مدیر سالن" Title="تنظیمات سالن" />
+    <PanelTabs />
+
+    @if (loading)
+    {
+        <LoadingState />
+    }
+    else if (error is not null)
+    {
+        <ErrorAlert Response="error" OnRetry="LoadAsync" />
+    }
+    else
+    {
+        <div class="grid-2">
+            <section class="card">
+                <div class="card-title"><h2>اطلاعات سالن</h2></div>
+                <ErrorAlert Response="infoError" />
+                <EditForm Model="info" OnValidSubmit="SaveInfoAsync" FormName="salon-info">
+                    <DataAnnotationsValidator />
+                    <div class="form-grid">
+                        <FormField Label="نام سالن" Wide="true"><InputText @bind-Value="info.Name" /><ValidationMessage For="() => info.Name" /></FormField>
+                        <FormField Label="شهر"><InputText @bind-Value="info.City" /><ValidationMessage For="() => info.City" /></FormField>
+                        <FormField Label="تلفن"><InputText @bind-Value="info.PhoneNumber" dir="ltr" /><ValidationMessage For="() => info.PhoneNumber" /></FormField>
+                        <FormField Label="آدرس" Wide="true"><InputText @bind-Value="info.Address" /><ValidationMessage For="() => info.Address" /></FormField>
+                        <FormField Label="توضیحات" Wide="true"><InputTextArea @bind-Value="info.Description" /></FormField>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" type="submit" disabled="@busyInfo">@(busyInfo ? "در حال ذخیره…" : "ذخیره")</button>
+                    </div>
+                </EditForm>
+            </section>
+
+            <section class="card">
+                <div class="card-title"><h2>بیعانه‌ی رزرو</h2></div>
+                <p class="muted">مبلغی که مشتری هنگام رزرو نوبت پرداخت می‌کند.</p>
+                <ErrorAlert Response="depositError" />
+                <EditForm Model="deposit" OnValidSubmit="SaveDepositAsync" FormName="salon-deposit">
+                    <DataAnnotationsValidator />
+                    <FormField Label="مبلغ (ریال)" Hint="@Fmt.Money(deposit.DepositAmountValue, deposit.DepositAmountCurrency)">
+                        <InputNumber @bind-Value="deposit.DepositAmountValue" dir="ltr" />
+                        <ValidationMessage For="() => deposit.DepositAmountValue" />
+                    </FormField>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" type="submit" disabled="@busyDeposit">@(busyDeposit ? "در حال ذخیره…" : "به‌روزرسانی بیعانه")</button>
+                    </div>
+                </EditForm>
+            </section>
+        </div>
+    }
+}
+
+@code {
+    private UpdateSalonRequest info = new();
+    private readonly UpdateSalonDepositAmountRequest deposit = new();
+    private bool loading = true, busyInfo, busyDeposit;
+    private ApiResponse? error, infoError, depositError;
+
+    protected override async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var res = await Salons.GetByIdAsync(SalonId);
+        if (!res.Success || res.Data is null) { error = res; loading = false; return; }
+        info = UpdateSalonRequest.From(res.Data);
+        deposit.DepositAmountValue = res.Data.DepositAmountValue;
+        deposit.DepositAmountCurrency = res.Data.DepositAmountCurrency;
+        loading = false;
+    }
+
+    private async Task SaveInfoAsync()
+    {
+        busyInfo = true; infoError = null;
+        var res = await Salons.UpdateMySalonAsync(info);
+        busyInfo = false;
+        if (!res.Success) { infoError = res; return; }
+        Toasts.Success("اطلاعات سالن ذخیره شد.");
+    }
+
+    private async Task SaveDepositAsync()
+    {
+        busyDeposit = true; depositError = null;
+        var res = await Salons.UpdateDepositAsync(deposit);
+        busyDeposit = false;
+        if (!res.Success) { depositError = res; return; }
+        Toasts.Success("مبلغ بیعانه به‌روز شد.");
+    }
+}

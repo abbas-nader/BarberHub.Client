@@ -1,0 +1,34 @@
+@* نمای هفتگی شنبه تا جمعه؛ اگر OnDelete/OnEdit داده شود، حالت مدیریتی است *@
+<div class="week">
+    @foreach (var d in Fmt.PersianWeek)
+    {
+        var slots = Items.Where(x => x.DayOfWeek == d).OrderBy(x => x.StartTime).ToList();
+        <div class="day @(slots.Count == 0 ? "off" : "")">
+            <h4>@Fmt.Day(d)</h4>
+            @if (slots.Count == 0)
+            {
+                <span>تعطیل</span>
+            }
+            @foreach (var s in slots)
+            {
+                <div class="slot">
+                    <span>@Fmt.Time(s.StartTime) – @Fmt.Time(s.EndTime)</span>
+                    @if (OnEdit.HasDelegate)
+                    {
+                        <button class="icon-btn" title="ویرایش" @onclick="() => OnEdit.InvokeAsync(s)">✎</button>
+                    }
+                    @if (OnDelete.HasDelegate)
+                    {
+                        <button class="icon-btn" title="حذف" @onclick="() => OnDelete.InvokeAsync(s)">✕</button>
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public IReadOnlyList<WorkScheduleResponse> Items { get; set; } = [];
+    [Parameter] public EventCallback<WorkScheduleResponse> OnEdit { get; set; }
+    [Parameter] public EventCallback<WorkScheduleResponse> OnDelete { get; set; }
+}

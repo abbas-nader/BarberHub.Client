@@ -1,0 +1,13 @@
+<nav class="tabs" aria-label="@Label">
+    @foreach (var item in Items)
+    {
+        <NavLink class="tab" href="@item.Href" Match="@(item.Exact ? NavLinkMatch.All : NavLinkMatch.Prefix)">@item.Text</NavLink>
+    }
+</nav>
+
+@code {
+    public sealed record TabItem(string Text, string Href, bool Exact = false);
+
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public IReadOnlyList<TabItem> Items { get; set; } = [];
+}

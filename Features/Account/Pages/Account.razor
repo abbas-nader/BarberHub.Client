@@ -1,0 +1,246 @@
+@page "/account"
+@attribute [Authorize]
+@inject UserApi Users
+@inject EndUserApi EndUsers
+@inject OtpApi Otp
+@inject SalonAdminApi SalonAdmins
+@inject PlatformAdminApi PlatformAdmins
+@inject AuthService Auth
+@inject ToastService Toasts
+@inject NavigationManager Nav
+
+<PageTitle>حساب من | BarberHub</PageTitle>
+
+@if (loading)
+{
+    <LoadingState />
+}
+else if (error is not null)
+{
+    <ErrorAlert Response="error" OnRetry="LoadAsync" />
+}
+else if (me is not null)
+{
+    <PageHeader Eyebrow="@Fmt.Role(role)" Title="@($"{me.FirstName} {me.LastName}")" Subtitle="@($"@{me.UserName}")" />
+
+    <div class="grid-2">
+        <section class="card">
+            <div class="card-title"><h2>اطلاعات حساب</h2></div>
+
+            @if (CanEditProfile)
+            {
+                <ErrorAlert Response="profileError" />
+                <EditForm Model="profile" OnValidSubmit="SaveProfileAsync" FormName="profile">
+                    <DataAnnotationsValidator />
+                    <div class="form-grid">
+                        <FormField Label="نام"><InputText @bind-Value="profile.FirstName" /><ValidationMessage For="() => profile.FirstName" /></FormField>
+                        <FormField Label="نام خانوادگی"><InputText @bind-Value="profile.LastName" /><ValidationMessage For="() => profile.LastName" /></FormField>
+                        <FormField Label="نام کاربری" Wide="true"><InputText @bind-Value="profile.UserName" dir="ltr" /><ValidationMessage For="() => profile.UserName" /></FormField>
+                        @if (role != UserRole.PlatformAdmin)
+                        {
+                            <FormField Label="شماره موبایل" Wide="true"
+                                       Hint="@(role == UserRole.EndUser ? "با تغییر شماره، باید دوباره آن را تایید کنید." : null)">
+                                <InputText @bind-Value="profile.MobileNumber" dir="ltr" inputmode="tel" />
+                                <ValidationMessage For="() => profile.MobileNumber" />
+                            </FormField>
+                        }
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" type="submit" disabled="@savingProfile">@(savingProfile ? "در حال ذخیره…" : "ذخیره")</button>
+                    </div>
+                </EditForm>
+            }
+            else
+            {
+                <dl class="stack" style="margin:0">
+                    <div><dt class="muted">نام کاربری</dt><dd class="ltr" style="margin:0">@me.UserName</dd></div>
+                    <div><dt class="muted">موبایل</dt><dd class="ltr" style="margin:0">@(me.MobileNumber ?? "—")</dd></div>
+                </dl>
+            }
+        </section>
+
+        <div class="stack">
+            @if (role == UserRole.EndUser)
+            {
+                <section class="card">
+                    <div class="card-title">
+                        <h2>تایید موبایل</h2>
+                        <StatusBadge Active="@(me.IsMobileVerified == true)" OnText="تایید شده" OffText="تایید نشده" />
+                    </div>
+                    @if (me.IsMobileVerified == true)
+                    {
+                        <p class="muted">شماره <span class="ltr">@me.MobileNumber</span> تایید شده است.</p>
+                    }
+                    else
+                    {
+                        <p class="muted">یک کد به <span class="ltr">@me.MobileNumber</span> ارسال می‌شود. (حداکثر ۳ بار در ۱۰ دقیقه)</p>
+                        <ErrorAlert Response="otpError" />
+                        @if (!otpSent)
+                        {
+                            <button class="btn btn-primary" @onclick="SendOtpAsync" disabled="@otpBusy">@(otpBusy ? "در حال ارسال…" : "ارسال کد")</button>
+                        }
+                        else
+                        {
+                            <EditForm Model="otp" OnValidSubmit="VerifyOtpAsync" FormName="otp">
+                                <DataAnnotationsValidator />
+                                <div class="row">
+                                    <InputText @bind-Value="otp.Code" dir="ltr" inputmode="numeric" placeholder="کد تایید" style="max-width:180px" />
+                                    <button class="btn btn-primary" type="submit" disabled="@otpBusy">تایید</button>
+                                    <button class="btn btn-ghost" type="button" @onclick="SendOtpAsync" disabled="@otpBusy">ارسال دوباره</button>
+                                </div>
+                                <ValidationMessage For="() => otp.Code" />
+                            </EditForm>
+                        }
+                    }
+                </section>
+            }
+
+            <section class="card">
+                <div class="card-title"><h2>تغییر رمز عبور</h2></div>
+                <ErrorAlert Response="pwdError" />
+                <EditForm Model="pwd" OnValidSubmit="ChangePasswordAsync" FormName="pwd">
+                    <DataAnnotationsValidator />
+                    <div class="stack">
+                        <FormField Label="رمز فعلی"><InputText type="password" @bind-Value="pwd.OldPassword" autocomplete="current-password" /><ValidationMessage For="() => pwd.OldPassword" /></FormField>
+                        <FormField Label="رمز جدید"><InputText type="password" @bind-Value="pwd.NewPassword" autocomplete="new-password" /><ValidationMessage For="() => pwd.NewPassword" /></FormField>
+                    </div>
+                    <div class="form-actions">
+                        <button class="btn btn-primary" type="submit" disabled="@pwdBusy">@(pwdBusy ? "صبر کنید…" : "تغییر رمز")</button>
+                    </div>
+                </EditForm>
+            </section>
+
+            @if (role is UserRole.EndUser or UserRole.SalonAdmin)
+            {
+                <section class="card">
+                    <div class="card-title"><h2 style="color:var(--pole-red)">حذف حساب</h2></div>
+                    <p class="muted">حساب شما غیرفعال و از سیستم خارج می‌شوید.</p>
+                    <button class="btn btn-danger" @onclick="() => confirmDelete = true">حذف حساب من</button>
+                </section>
+            }
+        </div>
+    </div>
+
+    <ConfirmDialog IsOpen="confirmDelete" Title="حذف حساب" Danger="true" ConfirmText="بله، حذف شود"
+                   Message="آیا مطمئن هستید؟ این کار قابل بازگشت نیست."
+                   OnConfirm="DeleteAccountAsync" OnCancel="() => confirmDelete = false" />
+}
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private UserResponse? me;
+    private UserRole role;
+    private long userId;
+    private bool loading = true;
+    private ApiResponse? error, profileError, pwdError, otpError;
+
+    private readonly ProfileForm profile = new();
+    private readonly ChangePasswordRequest pwd = new();
+    private readonly VerifyOtpRequest otp = new();
+    private bool savingProfile, pwdBusy, otpBusy, otpSent, confirmDelete;
+
+    // آرایشگر endpoint ویرایش پروفایل ندارد
+    private bool CanEditProfile => role is UserRole.EndUser or UserRole.SalonAdmin or UserRole.PlatformAdmin;
+
+    /// <summary>یک فرم برای سه endpoint متفاوت (end-user / salon-admin / platform-admin)</summary>
+    private sealed class ProfileForm
+    {
+        [Required(ErrorMessage = "نام الزامی است")] public string FirstName { get; set; } = "";
+        [Required(ErrorMessage = "نام خانوادگی الزامی است")] public string LastName { get; set; } = "";
+        [Required(ErrorMessage = "نام کاربری الزامی است")] public string UserName { get; set; } = "";
+        public string MobileNumber { get; set; } = "";
+    }
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var user = (await AuthState).User;
+        Enum.TryParse(user.RoleName(), out role);
+        userId = user.UserId() ?? 0;
+
+        var res = await Users.GetMeAsync();
+        if (!res.Success) { error = res; loading = false; return; }
+        me = res.Data!;
+        profile.FirstName = me.FirstName; profile.LastName = me.LastName;
+        profile.UserName = me.UserName; profile.MobileNumber = me.MobileNumber ?? "";
+        loading = false;
+    }
+
+    private async Task SaveProfileAsync()
+    {
+        if (role != UserRole.PlatformAdmin && string.IsNullOrWhiteSpace(profile.MobileNumber))
+        {
+            profileError = ApiResponse.Fail(400, "شماره موبایل الزامی است.");
+            return;
+        }
+
+        savingProfile = true; profileError = null;
+        ApiResponse res = role switch
+        {
+            UserRole.EndUser => await EndUsers.UpdateMeAsync(new UpdateEndUserRequest
+            { FirstName = profile.FirstName, LastName = profile.LastName, UserName = profile.UserName, MobileNumber = profile.MobileNumber }),
+            UserRole.SalonAdmin => await SalonAdmins.UpdateAsync(userId, new UpdateSalonAdminRequest
+            { FirstName = profile.FirstName, LastName = profile.LastName, Username = profile.UserName, MobileNumber = profile.MobileNumber }),
+            UserRole.PlatformAdmin => await PlatformAdmins.UpdateMeAsync(new UpdatePlatformAdminRequest
+            { FirstName = profile.FirstName, LastName = profile.LastName, UserName = profile.UserName }),
+            _ => ApiResponse.Fail(403, "ویرایش برای این نقش ممکن نیست.")
+        };
+        savingProfile = false;
+
+        if (!res.Success) { profileError = res; return; }
+        Toasts.Success("اطلاعات ذخیره شد.");
+        await LoadAsync();
+    }
+
+    private async Task ChangePasswordAsync()
+    {
+        pwdBusy = true; pwdError = null;
+        var res = await Users.ChangePasswordAsync(pwd);
+        pwdBusy = false;
+        if (!res.Success)
+        {
+            pwdError = res.IsUnauthorized ? ApiResponse.Fail(401, "رمز فعلی درست نیست.") : res;
+            return;
+        }
+        pwd.OldPassword = pwd.NewPassword = "";
+        Toasts.Success("رمز عبور تغییر کرد.");
+    }
+
+    private async Task SendOtpAsync()
+    {
+        otpBusy = true; otpError = null;
+        var res = await Otp.SendAsync();
+        otpBusy = false;
+        if (!res.Success) { otpError = res; return; }
+        otpSent = true;
+        Toasts.Info("کد تایید ارسال شد.");
+    }
+
+    private async Task VerifyOtpAsync()
+    {
+        otpBusy = true; otpError = null;
+        var res = await Otp.VerifyAsync(otp);
+        otpBusy = false;
+        if (!res.Success) { otpError = res; return; }
+        Toasts.Success("موبایل شما تایید شد.");
+        otpSent = false; otp.Code = "";
+        await LoadAsync();
+    }
+
+    private async Task DeleteAccountAsync()
+    {
+        ApiResponse res = role == UserRole.EndUser
+            ? await EndUsers.DeleteMeAsync(userId)
+            : await SalonAdmins.DeleteAsync(userId);
+
+        confirmDelete = false;
+        if (!res.Success) { Toasts.Error(res.ErrorMessage ?? "حذف انجام نشد."); return; }
+
+        await Auth.LogoutAsync();
+        Toasts.Info("حساب شما حذف شد.");
+        Nav.NavigateTo("", replace: true);
+    }
+}

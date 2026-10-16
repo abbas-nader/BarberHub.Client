@@ -1,0 +1,82 @@
+@page "/"
+@inject SalonApi Salons
+
+<PageTitle>BarberHub | سالن‌ها</PageTitle>
+
+<section class="hero">
+    <div>
+        <span class="eyebrow">BarberHub</span>
+        <h1>آرایشگر خودت را <em>پیدا کن</em>.</h1>
+        <p>سالن‌ها، آرایشگرها، خدمات و ساعت کاری؛ همه در یک نگاه.</p>
+    </div>
+    <div>
+        <div class="search">
+            <input placeholder="جستجوی نام سالن یا آدرس…" @bind="query" @bind:event="oninput" aria-label="جستجو" />
+        </div>
+        @if (cities.Count > 1)
+        {
+            <div class="chips">
+                <button class="chip @(city is null ? "on" : "")" @onclick="() => city = null">همه‌ی شهرها</button>
+                @foreach (var c in cities)
+                {
+                    <button class="chip @(city == c ? "on" : "")" @onclick="() => city = c">@c</button>
+                }
+            </div>
+        }
+    </div>
+</section>
+
+@if (loading)
+{
+    <LoadingState Text="در حال دریافت سالن‌ها…" />
+}
+else if (error is not null)
+{
+    <ErrorAlert Response="error" OnRetry="LoadAsync" />
+}
+else if (Filtered.Count == 0)
+{
+    <EmptyState Icon="💈" Title="سالنی پیدا نشد" Text="@(all.Count == 0 ? "هنوز سالنی ثبت نشده است." : "عبارت جستجو یا شهر را تغییر دهید.")" />
+}
+else
+{
+    <div class="grid">
+        @foreach (var s in Filtered)
+        {
+            <SalonCard Salon="s" @key="s.Id" />
+        }
+    </div>
+}
+
+@code {
+    private List<SalonResponse> all = [];
+    private List<string> cities = [];
+    private string query = "";
+    private string? city;
+    private bool loading = true;
+    private ApiResponse? error;
+
+    // سالن‌های فعال اول؛ فیلتر سمت کلاینت چون endpoint عمومی پارامتر جستجو ندارد
+    private List<SalonResponse> Filtered => all
+        .Where(s => city is null || s.City == city)
+        .Where(s => string.IsNullOrWhiteSpace(query)
+                    || s.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                    || s.Address.Contains(query, StringComparison.OrdinalIgnoreCase))
+        .OrderByDescending(s => s.IsActive).ThenBy(s => s.Name)
+        .ToList();
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var res = await Salons.GetAllAsync();
+        if (res.Success)
+        {
+            all = res.Data ?? [];
+            cities = all.Select(s => s.City).Distinct().OrderBy(c => c).ToList();
+        }
+        else error = res;
+        loading = false;
+    }
+}

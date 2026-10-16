@@ -1,0 +1,85 @@
+@page "/login"
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<PageTitle>ورود | BarberHub</PageTitle>
+
+<div class="auth-wrap">
+    <div class="card auth-card">
+        <span class="eyebrow">خوش برگشتی</span>
+        <h1>ورود به BarberHub</h1>
+        <p class="muted">نقش خود را انتخاب کنید؛ بک‌اند ورود را بر اساس نقش بررسی می‌کند.</p>
+
+        <ErrorAlert Response="error" />
+
+        <EditForm Model="model" OnValidSubmit="SubmitAsync" FormName="login">
+            <DataAnnotationsValidator />
+            <div class="stack">
+                <FormField Label="ورود به‌عنوان">
+                    <div class="role-picker" role="radiogroup">
+                        @foreach (var r in roles)
+                        {
+                            <button type="button" role="radio" aria-checked="@(model.Role == r)"
+                                    class="role-option @(model.Role == r ? "on" : "")" @onclick="() => model.Role = r">
+                                @Fmt.Role(r)
+                            </button>
+                        }
+                    </div>
+                </FormField>
+                <FormField Label="نام کاربری">
+                    <InputText @bind-Value="model.Username" autocomplete="username" dir="ltr" />
+                    <ValidationMessage For="() => model.Username" />
+                </FormField>
+                <FormField Label="رمز عبور">
+                    <InputText type="password" @bind-Value="model.Password" autocomplete="current-password" />
+                    <ValidationMessage For="() => model.Password" />
+                </FormField>
+                <button type="submit" class="btn btn-primary btn-block" disabled="@busy">
+                    @(busy ? "در حال ورود…" : "ورود")
+                </button>
+            </div>
+        </EditForm>
+
+        <p class="muted" style="margin-top:16px">
+            حساب ندارید؟ <a href="register">ثبت‌نام مشتری</a>
+        </p>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery] public string? ReturnUrl { get; set; }
+
+    private static readonly UserRole[] roles = [UserRole.EndUser, UserRole.SalonAdmin, UserRole.Barber, UserRole.PlatformAdmin];
+    private readonly LoginRequest model = new();
+    private ApiResponse? error;
+    private bool busy;
+
+    private async Task SubmitAsync()
+    {
+        busy = true; error = null;
+        var res = await Auth.LoginAsync(model);
+        busy = false;
+
+        if (!res.Success)
+        {
+            // 401 در ورود یعنی نام کاربری/رمز/نقش اشتباه
+            error = res.IsUnauthorized
+                ? ApiResponse.Fail(401, "نام کاربری، رمز عبور یا نقش انتخاب‌شده درست نیست.")
+                : res;
+            return;
+        }
+
+        Nav.NavigateTo(SafeReturnUrl() ?? HomeFor(model.Role), replace: true);
+    }
+
+    private string? SafeReturnUrl()
+        => !string.IsNullOrWhiteSpace(ReturnUrl) && !ReturnUrl.Contains("://") && !ReturnUrl.StartsWith("//") && !ReturnUrl.StartsWith("login")
+            ? ReturnUrl : null;
+
+    private static string HomeFor(UserRole role) => role switch
+    {
+        UserRole.PlatformAdmin => "admin",
+        UserRole.SalonAdmin => "panel",
+        _ => ""
+    };
+}

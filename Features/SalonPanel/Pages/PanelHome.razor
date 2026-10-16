@@ -1,0 +1,84 @@
+@page "/panel"
+@attribute [Authorize(Roles = Roles.SalonAdmin)]
+@inherits SalonPanelPageBase
+@inject SalonApi Salons
+@inject BarberApi Barbers
+@inject ServiceCatalogApi Catalog
+@inject GalleryApi Gallery
+
+<PageTitle>پنل سالن | BarberHub</PageTitle>
+
+@if (MissingSalon)
+{
+    <MissingSalonNotice />
+}
+else
+{
+    <PageHeader Eyebrow="پنل مدیر سالن" Title="@(salon?.Name ?? "سالن من")" Subtitle="@(salon is null ? null : $"{salon.City}، {salon.Address}")">
+        <Actions>
+            <a class="btn btn-ghost" href="@($"salons/{SalonId}")">نمای عمومی</a>
+            <a class="btn btn-primary" href="panel/barbers">مدیریت آرایشگرها</a>
+        </Actions>
+    </PageHeader>
+    <PanelTabs />
+
+    @if (loading)
+    {
+        <LoadingState />
+    }
+    else if (error is not null)
+    {
+        <ErrorAlert Response="error" OnRetry="LoadAsync" />
+    }
+    else
+    {
+        <div class="stats">
+            <div class="stat"><div class="num">@barbers.Count(b => b.IsActive)</div><div class="lbl">آرایشگر فعال از @barbers.Count</div></div>
+            <div class="stat"><div class="num">@servicesCount</div><div class="lbl">خدمت در کاتالوگ</div></div>
+            <div class="stat"><div class="num">@galleryCount</div><div class="lbl">تصویر در گالری</div></div>
+            <div class="stat"><div class="num" style="font-size:1.3rem">@Fmt.Money(salon!.DepositAmountValue, salon.DepositAmountCurrency)</div><div class="lbl">بیعانه‌ی رزرو</div></div>
+        </div>
+
+        <div class="grid-2">
+            <section class="card">
+                <div class="card-title"><h2>وضعیت سالن</h2><StatusBadge Active="salon.IsActive" /></div>
+                <p class="muted">@(salon.IsActive ? "سالن شما در لیست عمومی قابل مشاهده است." : "سالن غیرفعال است؛ فعال‌سازی توسط مدیر پلتفرم انجام می‌شود.")</p>
+                <a class="btn btn-ghost btn-sm" href="panel/settings">ویرایش اطلاعات سالن</a>
+            </section>
+            <section class="card">
+                <div class="card-title"><h2>کارهای بعدی</h2></div>
+                <ul class="menu-list">
+                    @if (servicesCount == 0) { <li class="menu-item"><a href="panel/services">اولین خدمت سالن را تعریف کنید</a></li> }
+                    @if (barbers.Count == 0) { <li class="menu-item"><a href="panel/barbers">اولین آرایشگر را اضافه کنید</a></li> }
+                    @if (galleryCount == 0) { <li class="menu-item"><a href="panel/gallery">چند نمونه‌کار در گالری بگذارید</a></li> }
+                    @if (servicesCount > 0 && barbers.Count > 0 && galleryCount > 0) { <li class="menu-item muted">همه‌چیز آماده است ✂️</li> }
+                </ul>
+            </section>
+        </div>
+    }
+}
+
+@code {
+    private SalonResponse? salon;
+    private List<BarberResponse> barbers = [];
+    private int servicesCount, galleryCount;
+    private bool loading = true;
+    private ApiResponse? error;
+
+    protected override async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var sT = Salons.GetByIdAsync(SalonId);
+        var bT = Barbers.GetBySalonAsync(SalonId);
+        var cT = Catalog.GetBySalonAsync(SalonId);
+        var gT = Gallery.GetBySalonAsync(SalonId);
+        await Task.WhenAll(sT, bT, cT, gT);
+
+        if (!sT.Result.Success) { error = sT.Result; loading = false; return; }
+        salon = sT.Result.Data;
+        barbers = bT.Result.Data ?? [];
+        servicesCount = cT.Result.Data?.Count ?? 0;
+        galleryCount = gT.Result.Data?.Count ?? 0;
+        loading = false;
+    }
+}

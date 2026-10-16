@@ -1,0 +1,117 @@
+@page "/panel/services"
+@attribute [Authorize(Roles = Roles.SalonAdmin)]
+@inherits SalonPanelPageBase
+@inject ServiceCatalogApi Catalog
+@inject ToastService Toasts
+
+<PageTitle>خدمات | پنل سالن</PageTitle>
+
+@if (MissingSalon)
+{
+    <MissingSalonNotice />
+}
+else
+{
+    <PageHeader Eyebrow="پنل مدیر سالن" Title="کاتالوگ خدمات" Subtitle="خدماتی که سالن ارائه می‌دهد. قیمت و مدت برای هر آرایشگر جداگانه تعیین می‌شود.">
+        <Actions>
+            <button class="btn btn-primary" @onclick="() => OpenEditor(null)">+ خدمت جدید</button>
+        </Actions>
+    </PageHeader>
+    <PanelTabs />
+
+    @if (loading)
+    {
+        <LoadingState />
+    }
+    else if (error is not null)
+    {
+        <ErrorAlert Response="error" OnRetry="LoadAsync" />
+    }
+    else if (services.Count == 0)
+    {
+        <EmptyState Icon="🧴" Title="کاتالوگ خالی است" Text="مثلا: اصلاح مو، اصلاح ریش، رنگ مو.">
+            <button class="btn btn-primary" @onclick="() => OpenEditor(null)">تعریف اولین خدمت</button>
+        </EmptyState>
+    }
+    else
+    {
+        <div class="grid">
+            @foreach (var s in services)
+            {
+                <div class="card entity-card" @key="s.Id">
+                    <h3 style="margin:0">@s.Name</h3>
+                    <p class="desc">@(string.IsNullOrWhiteSpace(s.Description) ? "بدون توضیح" : s.Description)</p>
+                    <div class="foot">
+                        <button class="btn btn-ghost btn-sm" @onclick="() => OpenEditor(s)">ویرایش</button>
+                        <button class="btn btn-ghost btn-sm" style="color:var(--pole-red)" @onclick="() => toDelete = s">حذف</button>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <Modal IsOpen="showEditor" Title="@(editingId is null ? "خدمت جدید" : "ویرایش خدمت")" OnClose="() => showEditor = false">
+        <ErrorAlert Response="formError" />
+        <EditForm Model="form" OnValidSubmit="SaveAsync" FormName="service-form">
+            <DataAnnotationsValidator />
+            <div class="stack">
+                <FormField Label="نام خدمت"><InputText @bind-Value="form.Name" /><ValidationMessage For="() => form.Name" /></FormField>
+                <FormField Label="توضیحات"><InputTextArea @bind-Value="form.Description" /></FormField>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-ghost" @onclick="() => showEditor = false">انصراف</button>
+                <button type="submit" class="btn btn-primary" disabled="@saving">@(saving ? "در حال ذخیره…" : "ذخیره")</button>
+            </div>
+        </EditForm>
+    </Modal>
+
+    <ConfirmDialog IsOpen="toDelete is not null" Title="حذف خدمت" Danger="true" ConfirmText="حذف"
+                   Message="@($"خدمت «{toDelete?.Name}» حذف شود؟ قیمت‌گذاری آرایشگرها برای این خدمت هم بی‌اثر می‌شود.")"
+                   OnConfirm="DeleteAsync" OnCancel="() => toDelete = null" />
+}
+
+@code {
+    private List<ServiceResponse> services = [];
+    private bool loading = true, showEditor, saving;
+    private long? editingId;
+    private ServiceResponse? toDelete;
+    private ServiceForm form = new();
+    private ApiResponse? error, formError;
+
+    protected override async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var res = await Catalog.GetBySalonAsync(SalonId);
+        if (res.Success) services = (res.Data ?? []).OrderBy(s => s.Name).ToList();
+        else error = res;
+        loading = false;
+    }
+
+    private void OpenEditor(ServiceResponse? s)
+    {
+        editingId = s?.Id;
+        form = new ServiceForm { Name = s?.Name ?? "", Description = s?.Description };
+        formError = null; showEditor = true;
+    }
+
+    private async Task SaveAsync()
+    {
+        saving = true; formError = null;
+        var res = editingId is null ? await Catalog.CreateAsync(form) : await Catalog.UpdateAsync(editingId.Value, form);
+        saving = false;
+        if (!res.Success) { formError = res; return; }
+        showEditor = false;
+        Toasts.Success("خدمت ذخیره شد.");
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (toDelete is null) return;
+        var res = await Catalog.DeleteAsync(toDelete.Id);
+        toDelete = null;
+        if (!res.Success) { Toasts.Error(res.ErrorMessage!); return; }
+        Toasts.Success("خدمت حذف شد.");
+        await LoadAsync();
+    }
+}

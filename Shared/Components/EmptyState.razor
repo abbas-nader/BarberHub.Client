@@ -1,0 +1,16 @@
+<div class="state state-empty">
+    <div class="state-icon" aria-hidden="true">@Icon</div>
+    <h2>@Title</h2>
+    @if (!string.IsNullOrWhiteSpace(Text))
+    {
+        <p>@Text</p>
+    }
+    @ChildContent
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "✂️";
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string? Text { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

@@ -1,0 +1,171 @@
+@page "/panel/gallery"
+@attribute [Authorize(Roles = Roles.SalonAdmin)]
+@inherits SalonPanelPageBase
+@inject GalleryApi Gallery
+@inject FileApi Files
+@inject BarberApi Barbers
+@inject ToastService Toasts
+
+<PageTitle>گالری | پنل سالن</PageTitle>
+
+@if (MissingSalon)
+{
+    <MissingSalonNotice />
+}
+else
+{
+    <PageHeader Eyebrow="پنل مدیر سالن" Title="گالری نمونه‌کارها" Subtitle="تصاویر را می‌توانید به یک آرایشگر خاص نسبت دهید.">
+        <Actions>
+            <button class="btn btn-primary" @onclick="OpenUpload">+ آپلود تصویر</button>
+        </Actions>
+    </PageHeader>
+    <PanelTabs />
+
+    @if (loading)
+    {
+        <LoadingState />
+    }
+    else if (error is not null)
+    {
+        <ErrorAlert Response="error" OnRetry="LoadAsync" />
+    }
+    else
+    {
+        <GalleryGrid Items="items" ImageUrls="imageUrls" EmptyText="هنوز تصویری آپلود نکرده‌اید.">
+            <Actions Context="g">
+                @if (g.BarberId is not null && barberNames.TryGetValue(g.BarberId.Value, out var bn))
+                {
+                    <span class="badge badge-on" style="background:var(--tint);color:var(--pole-blue-deep)">@bn</span>
+                }
+                <button class="btn btn-ghost btn-sm" @onclick="() => OpenCaption(g)">توضیح</button>
+                <button class="btn btn-ghost btn-sm" style="color:var(--pole-red)" @onclick="() => toDelete = g">حذف</button>
+            </Actions>
+        </GalleryGrid>
+    }
+
+    <Modal IsOpen="showUpload" Title="آپلود تصویر" OnClose="() => showUpload = false">
+        <ErrorAlert Response="uploadError" />
+        <div class="stack">
+            <FormField Label="فایل تصویر" Hint="@($"حداکثر {Fmt.FileSize(GalleryApi.MaxUploadBytes)}؛ jpg، png یا webp")">
+                <InputFile OnChange="OnFileSelected" accept="image/*" />
+            </FormField>
+            @if (file is not null)
+            {
+                <p class="muted">@file.Name · @Fmt.FileSize(file.Size)</p>
+            }
+            <FormField Label="توضیح (اختیاری)"><input @bind="caption" /></FormField>
+            <FormField Label="آرایشگر (اختیاری)">
+                <select @bind="barberId">
+                    <option value="">— کل سالن —</option>
+                    @foreach (var b in barberNames)
+                    {
+                        <option value="@b.Key">@b.Value</option>
+                    }
+                </select>
+            </FormField>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-ghost" @onclick="() => showUpload = false">انصراف</button>
+            <button class="btn btn-primary" disabled="@(file is null || uploading)" @onclick="UploadAsync">@(uploading ? "در حال آپلود…" : "آپلود")</button>
+        </div>
+    </Modal>
+
+    <Modal IsOpen="editing is not null" Title="ویرایش توضیح" OnClose="() => editing = null">
+        <FormField Label="توضیح"><textarea @bind="captionEdit"></textarea></FormField>
+        <div class="form-actions">
+            <button class="btn btn-ghost" @onclick="() => editing = null">انصراف</button>
+            <button class="btn btn-primary" disabled="@savingCaption" @onclick="SaveCaptionAsync">ذخیره</button>
+        </div>
+    </Modal>
+
+    <ConfirmDialog IsOpen="toDelete is not null" Title="حذف تصویر" Danger="true" ConfirmText="حذف"
+                   Message="این تصویر از گالری حذف شود؟" OnConfirm="DeleteAsync" OnCancel="() => toDelete = null" />
+}
+
+@code {
+    private List<GalleryResponse> items = [];
+    private Dictionary<long, string> imageUrls = new();
+    private Dictionary<long, string> barberNames = new();
+    private bool loading = true, showUpload, uploading, savingCaption;
+    private ApiResponse? error, uploadError;
+
+    private IBrowserFile? file;
+    private string? caption;
+    private long? barberId;
+
+    private GalleryResponse? editing, toDelete;
+    private string? captionEdit;
+
+    protected override async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var gT = Gallery.GetBySalonAsync(SalonId);
+        var bT = Barbers.GetBySalonAsync(SalonId);
+        await Task.WhenAll(gT, bT);
+
+        if (!gT.Result.Success) { error = gT.Result; loading = false; return; }
+        items = gT.Result.Data ?? [];
+        barberNames = (bT.Result.Data ?? []).ToDictionary(b => b.Id, b => $"{b.FirstName} {b.LastName}");
+        loading = false;
+
+        await LoadImagesAsync(items.Where(i => !imageUrls.ContainsKey(i.FileId)));
+    }
+
+    /// <summary>URL هر تصویر با file/{id} گرفته می‌شود (موازی). بعد از نمایش گرید، تصاویر کم‌کم ظاهر می‌شوند.</summary>
+    private async Task LoadImagesAsync(IEnumerable<GalleryResponse> list)
+    {
+        var results = await Task.WhenAll(list.Select(async g => (g.FileId, res: await Files.GetByIdAsync(g.FileId))));
+        foreach (var r in results.Where(r => r.res.Success && r.res.Data is not null))
+            imageUrls[r.FileId] = r.res.Data!.Url;
+        StateHasChanged();
+    }
+
+    private void OpenUpload() { file = null; caption = null; barberId = null; uploadError = null; showUpload = true; }
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        uploadError = null;
+        file = e.File;
+        if (file.Size > GalleryApi.MaxUploadBytes)
+        {
+            uploadError = ApiResponse.Fail(400, $"حجم فایل بیشتر از {Fmt.FileSize(GalleryApi.MaxUploadBytes)} است.");
+            file = null;
+        }
+    }
+
+    private async Task UploadAsync()
+    {
+        if (file is null) return;
+        uploading = true; uploadError = null;
+        var res = await Gallery.UploadAsync(file, caption, barberId);
+        uploading = false;
+        if (!res.Success) { uploadError = res; return; }
+        showUpload = false;
+        Toasts.Success("تصویر آپلود شد.");
+        await LoadAsync();
+    }
+
+    private void OpenCaption(GalleryResponse g) { editing = g; captionEdit = g.Caption; }
+
+    private async Task SaveCaptionAsync()
+    {
+        if (editing is null) return;
+        savingCaption = true;
+        var res = await Gallery.UpdateCaptionAsync(editing.Id, captionEdit);
+        savingCaption = false;
+        if (!res.Success) { Toasts.Error(res.ErrorMessage!); return; }
+        editing = null;
+        Toasts.Success("توضیح ذخیره شد.");
+        await LoadAsync();
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (toDelete is null) return;
+        var res = await Gallery.DeleteAsync(toDelete.Id);
+        toDelete = null;
+        if (!res.Success) { Toasts.Error(res.ErrorMessage!); return; }
+        Toasts.Success("تصویر حذف شد.");
+        await LoadAsync();
+    }
+}

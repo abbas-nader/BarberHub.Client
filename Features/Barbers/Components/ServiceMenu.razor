@@ -1,0 +1,33 @@
+@* منوی قیمت به سبک تابلوی آرایشگاه: نام .... مدت | قیمت *@
+@if (Items.Count == 0)
+{
+    <p class="muted">@EmptyText</p>
+}
+else
+{
+    <ul class="menu-list">
+        @foreach (var i in Items)
+        {
+            <li class="menu-item">
+                <span class="name">@NameOf(i.ServiceId)<span class="sub">@DescOf(i.ServiceId)</span></span>
+                <span class="dots"></span>
+                <span class="dur">@Fmt.Duration(i.Duration)</span>
+                <span class="price">@Fmt.Money(i.PriceValue, i.PriceCurrency)</span>
+                @if (Actions is not null)
+                {
+                    @Actions(i)
+                }
+            </li>
+        }
+    </ul>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<BarberServiceResponse> Items { get; set; } = [];
+    [Parameter] public IReadOnlyDictionary<long, ServiceResponse> Catalog { get; set; } = new Dictionary<long, ServiceResponse>();
+    [Parameter] public string EmptyText { get; set; } = "هنوز خدمتی برای این آرایشگر ثبت نشده است.";
+    [Parameter] public RenderFragment<BarberServiceResponse>? Actions { get; set; }
+
+    private string NameOf(long id) => Catalog.TryGetValue(id, out var s) ? s.Name : $"خدمت #{id}";
+    private string? DescOf(long id) => Catalog.TryGetValue(id, out var s) ? s.Description : null;
+}

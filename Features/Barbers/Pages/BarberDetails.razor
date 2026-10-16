@@ -1,0 +1,81 @@
+@page "/salons/{SalonId:long}/barbers/{BarberId:long}"
+@inject BarberApi Barbers
+@inject BarberServiceApi BarberServices
+@inject ServiceCatalogApi Catalog
+@inject WorkScheduleApi Schedules
+
+<PageTitle>@(barber is null ? "آرایشگر" : $"{barber.FirstName} {barber.LastName}") | BarberHub</PageTitle>
+
+<a href="@($"salons/{SalonId}")" class="muted">→ بازگشت به سالن</a>
+
+@if (loading)
+{
+    <LoadingState Text="در حال دریافت اطلاعات آرایشگر…" />
+}
+else if (error is not null)
+{
+    <ErrorAlert Response="error" OnRetry="LoadAsync" />
+}
+else if (barber is not null)
+{
+    <section class="detail-hero" style="margin-top:12px">
+        <div class="row" style="gap:20px">
+            <Avatar First="@barber.FirstName" Last="@barber.LastName" Large="true" />
+            <div>
+                <span class="eyebrow" style="color:#9cc6e3">آرایشگر</span>
+                <h1 style="margin:0">@barber.FirstName @barber.LastName <StatusBadge Active="barber.IsActive" /></h1>
+                @if (!string.IsNullOrWhiteSpace(barber.Description))
+                {
+                    <p style="margin:6px 0 0;color:rgba(255,255,255,.85)">@barber.Description</p>
+                }
+            </div>
+        </div>
+    </section>
+
+    <div class="grid-2">
+        <section class="card">
+            <div class="card-title"><h2>خدمات و قیمت‌ها</h2></div>
+            <ServiceMenu Items="barberServices" Catalog="catalog" />
+        </section>
+        <section class="card">
+            <div class="card-title"><h2>ساعت کاری هفتگی</h2></div>
+            <WeeklySchedule Items="schedule" />
+        </section>
+    </div>
+
+    <div class="alert alert-info" style="margin-top:16px">
+        <span class="alert-icon">i</span>
+        <div class="alert-body">رزرو آنلاین نوبت به‌محض اضافه شدن API نوبت‌دهی در بک‌اند، همین‌جا فعال می‌شود.</div>
+    </div>
+}
+
+@code {
+    [Parameter] public long SalonId { get; set; }
+    [Parameter] public long BarberId { get; set; }
+
+    private BarberResponse? barber;
+    private List<BarberServiceResponse> barberServices = [];
+    private Dictionary<long, ServiceResponse> catalog = new();
+    private List<WorkScheduleResponse> schedule = [];
+    private bool loading = true;
+    private ApiResponse? error;
+
+    protected override Task OnParametersSetAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var bTask = Barbers.GetByIdAsync(BarberId);
+        var sTask = BarberServices.GetByBarberAsync(BarberId);
+        var cTask = Catalog.GetBySalonAsync(SalonId);
+        var wTask = Schedules.GetByBarberAsync(BarberId);
+        await Task.WhenAll(bTask, sTask, cTask, wTask);
+
+        if (!bTask.Result.Success) { error = bTask.Result; loading = false; return; }
+        barber = bTask.Result.Data;
+        barberServices = sTask.Result.Data ?? [];
+        catalog = (cTask.Result.Data ?? []).ToDictionary(x => x.Id);
+        schedule = wTask.Result.Data ?? [];
+        loading = false;
+    }
+}

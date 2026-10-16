@@ -1,0 +1,27 @@
+<CascadingAuthenticationState>
+    <Router AppAssembly="@typeof(App).Assembly">
+        <Found Context="routeData">
+            <AuthorizeRouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)">
+                <Authorizing>
+                    <LoadingState Text="در حال بررسی دسترسی…" />
+                </Authorizing>
+                <NotAuthorized>
+                    @if (context.User.Identity?.IsAuthenticated != true)
+                    {
+                        <RedirectToLogin />
+                    }
+                    else
+                    {
+                        <EmptyState Icon="⛔" Title="دسترسی ندارید" Text="این بخش برای نقش کاربری شما فعال نیست." />
+                    }
+                </NotAuthorized>
+            </AuthorizeRouteView>
+            <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+        </Found>
+        <NotFound>
+            <LayoutView Layout="@typeof(MainLayout)">
+                <EmptyState Icon="✂️" Title="صفحه پیدا نشد" Text="آدرسی که وارد کردید وجود ندارد." />
+            </LayoutView>
+        </NotFound>
+    </Router>
+</CascadingAuthenticationState>

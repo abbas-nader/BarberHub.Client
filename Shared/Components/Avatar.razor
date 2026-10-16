@@ -1,0 +1,7 @@
+<span class="avatar @(Large ? "avatar-lg" : "")" aria-hidden="true">@Fmt.Initials(First, Last)</span>
+
+@code {
+    [Parameter] public string First { get; set; } = "";
+    [Parameter] public string Last { get; set; } = "";
+    [Parameter] public bool Large { get; set; }
+}

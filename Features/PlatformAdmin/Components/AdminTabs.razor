@@ -1,0 +1,11 @@
+<SectionTabs Label="مدیریت پلتفرم" Items="items" />
+
+@code {
+    private static readonly IReadOnlyList<SectionTabs.TabItem> items =
+    [
+        new("سالن‌ها", "admin", true),
+        new("مشتری‌ها", "admin/users"),
+        new("مدیران پلتفرم", "admin/admins"),
+        new("لاگ خطاها", "admin/logs"),
+    ];
+}

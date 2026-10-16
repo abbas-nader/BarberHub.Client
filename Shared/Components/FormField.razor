@@ -1,0 +1,16 @@
+@* برچسب + ورودی + پیام اعتبارسنجی، برای یکدست بودن همه‌ی فرم‌ها *@
+<div class="field @(Wide ? "field-wide" : "")">
+    <label>@Label</label>
+    @ChildContent
+    @if (Hint is not null)
+    {
+        <small class="hint">@Hint</small>
+    }
+</div>
+
+@code {
+    [Parameter] public string Label { get; set; } = "";
+    [Parameter] public string? Hint { get; set; }
+    [Parameter] public bool Wide { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}

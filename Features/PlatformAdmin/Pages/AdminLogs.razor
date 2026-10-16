@@ -1,0 +1,98 @@
+@page "/admin/logs"
+@attribute [Authorize(Roles = Roles.PlatformAdmin)]
+@inject ExceptionLogApi Logs
+
+<PageTitle>لاگ خطاها | مدیریت پلتفرم</PageTitle>
+
+<PageHeader Eyebrow="مدیریت پلتفرم" Title="لاگ خطاها" Subtitle="خطاهای ثبت‌شده توسط ExceptionHandlingMiddleware بک‌اند.">
+    <Actions>
+        <select @bind="count" @bind:after="LoadAsync" style="width:auto">
+            <option value="20">۲۰ مورد اخیر</option>
+            <option value="50">۵۰ مورد اخیر</option>
+            <option value="100">۱۰۰ مورد اخیر</option>
+            <option value="0">همه</option>
+        </select>
+        <button class="btn btn-ghost" @onclick="LoadAsync">بارگذاری مجدد</button>
+    </Actions>
+</PageHeader>
+<AdminTabs />
+
+@if (loading)
+{
+    <LoadingState />
+}
+else if (error is not null)
+{
+    <ErrorAlert Response="error" OnRetry="LoadAsync" />
+}
+else if (logs.Count == 0)
+{
+    <EmptyState Icon="✅" Title="خطایی ثبت نشده" Text="همه‌چیز آرام است." />
+}
+else
+{
+    <div class="table-wrap">
+        <table class="table">
+            <thead><tr><th>زمان</th><th>کد</th><th>مسیر</th><th>نوع</th><th>پیام</th></tr></thead>
+            <tbody>
+                @foreach (var l in logs)
+                {
+                    <tr class="clickable" @key="l.Id" @onclick="() => OpenAsync(l.Id)">
+                        <td style="white-space:nowrap">@Fmt.DateTime(l.CreatedAt)</td>
+                        <td><span class="status-code @(l.StatusCode >= 500 ? "s5" : "s4")">@l.StatusCode</span></td>
+                        <td><span class="ltr">@l.RequestMethod @l.RequestPath</span></td>
+                        <td><span class="ltr">@l.ExceptionType</span></td>
+                        <td style="max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@l.Message</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<Modal IsOpen="selected is not null || detailLoading" Title="جزئیات خطا" OnClose="() => { selected = null; detailLoading = false; }">
+    @if (detailLoading)
+    {
+        <LoadingState />
+    }
+    else if (selected is not null)
+    {
+        <div class="stack">
+            <div class="row"><span class="status-code @(selected.StatusCode >= 500 ? "s5" : "s4")">@selected.StatusCode</span><span class="ltr">@selected.RequestMethod @selected.RequestPath</span></div>
+            <div><span class="muted">نوع:</span> <span class="ltr">@selected.ExceptionType</span></div>
+            <div><span class="muted">منبع:</span> <span class="ltr">@(selected.Source ?? "—")</span></div>
+            <div><span class="muted">زمان:</span> @Fmt.DateTime(selected.CreatedAt)</div>
+            <pre class="code">@selected.Message</pre>
+            @if (!string.IsNullOrWhiteSpace(selected.StackTrace))
+            {
+                <pre class="code">@selected.StackTrace</pre>
+            }
+        </div>
+    }
+</Modal>
+
+@code {
+    private List<ExceptionLogResponse> logs = [];
+    private ExceptionLogResponse? selected;
+    private int count = 20;
+    private bool loading = true, detailLoading;
+    private ApiResponse? error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var res = count > 0 ? await Logs.GetRecentAsync(count) : await Logs.GetAllAsync();
+        if (res.Success) logs = (res.Data ?? []).OrderByDescending(l => l.CreatedAt).ToList(); else error = res;
+        loading = false;
+    }
+
+    private async Task OpenAsync(string id)
+    {
+        detailLoading = true; selected = null;
+        var res = await Logs.GetByIdAsync(id);
+        detailLoading = false;
+        selected = res.Data ?? logs.FirstOrDefault(l => l.Id == id);
+    }
+}

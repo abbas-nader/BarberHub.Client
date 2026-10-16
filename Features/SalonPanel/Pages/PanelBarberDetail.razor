@@ -1,0 +1,288 @@
+@page "/panel/barbers/{BarberId:long}"
+@attribute [Authorize(Roles = Roles.SalonAdmin)]
+@inherits SalonPanelPageBase
+@inject BarberApi Barbers
+@inject BarberServiceApi BarberServices
+@inject ServiceCatalogApi Catalog
+@inject WorkScheduleApi Schedules
+@inject ToastService Toasts
+
+<PageTitle>مدیریت آرایشگر | پنل سالن</PageTitle>
+
+@if (MissingSalon)
+{
+    <MissingSalonNotice />
+}
+else
+{
+    <a href="panel/barbers" class="muted">→ همه‌ی آرایشگرها</a>
+
+    @if (loading)
+    {
+        <LoadingState />
+    }
+    else if (error is not null)
+    {
+        <ErrorAlert Response="error" OnRetry="LoadAsync" />
+    }
+    else if (barber is not null)
+    {
+        <PageHeader Eyebrow="آرایشگر" Title="@($"{barber.FirstName} {barber.LastName}")">
+            <Actions>
+                <StatusBadge Active="barber.IsActive" />
+                <button class="btn btn-ghost" @onclick="OpenEdit">ویرایش مشخصات</button>
+            </Actions>
+        </PageHeader>
+
+        <div class="grid-2">
+            @* ---------- خدمات و قیمت ---------- *@
+            <section class="card">
+                <div class="card-title">
+                    <h2>خدمات و قیمت</h2>
+                    <button class="btn btn-primary btn-sm" disabled="@(AvailableServices.Count == 0 && editingServiceId is null)" @onclick="() => OpenServiceEditor(null)">+ افزودن</button>
+                </div>
+                @if (catalog.Count == 0)
+                {
+                    <p class="muted">ابتدا در <a href="panel/services">کاتالوگ خدمات</a> خدمتی تعریف کنید.</p>
+                }
+                <ServiceMenu Items="barberServices" Catalog="catalog">
+                    <Actions Context="bs">
+                        <button class="icon-btn" title="ویرایش" @onclick="() => OpenServiceEditor(bs)">✎</button>
+                        <button class="icon-btn" title="حذف" @onclick="() => serviceToDelete = bs">✕</button>
+                    </Actions>
+                </ServiceMenu>
+            </section>
+
+            @* ---------- ساعت کاری ---------- *@
+            <section class="card">
+                <div class="card-title">
+                    <h2>ساعت کاری هفتگی</h2>
+                    <button class="btn btn-primary btn-sm" @onclick="() => OpenScheduleEditor(null)">+ بازه‌ی جدید</button>
+                </div>
+                <WeeklySchedule Items="schedule" OnEdit="OpenScheduleEditor" OnDelete="s => scheduleToDelete = s" />
+                <p class="hint" style="margin-top:12px">برای هر روز می‌توانید چند بازه تعریف کنید (مثلا صبح و عصر).</p>
+            </section>
+        </div>
+    }
+
+    @* ---------- مودال ویرایش آرایشگر ---------- *@
+    <Modal IsOpen="showEdit" Title="ویرایش مشخصات آرایشگر" OnClose="() => showEdit = false">
+        <ErrorAlert Response="editError" />
+        <EditForm Model="editForm" OnValidSubmit="SaveBarberAsync" FormName="barber-edit">
+            <DataAnnotationsValidator />
+            <div class="form-grid">
+                <FormField Label="نام"><InputText @bind-Value="editForm.FirstName" /><ValidationMessage For="() => editForm.FirstName" /></FormField>
+                <FormField Label="نام خانوادگی"><InputText @bind-Value="editForm.LastName" /><ValidationMessage For="() => editForm.LastName" /></FormField>
+                <FormField Label="موبایل"><InputText @bind-Value="editForm.MobileNumber" dir="ltr" /><ValidationMessage For="() => editForm.MobileNumber" /></FormField>
+                <FormField Label="نام کاربری" Hint="API نام کاربری فعلی را برنمی‌گرداند؛ آن را وارد کنید.">
+                    <InputText @bind-Value="editForm.Username" dir="ltr" /><ValidationMessage For="() => editForm.Username" />
+                </FormField>
+                <FormField Label="معرفی کوتاه" Wide="true"><InputTextArea @bind-Value="editForm.Description" /></FormField>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-ghost" @onclick="() => showEdit = false">انصراف</button>
+                <button type="submit" class="btn btn-primary" disabled="@saving">@(saving ? "در حال ذخیره…" : "ذخیره")</button>
+            </div>
+        </EditForm>
+    </Modal>
+
+    @* ---------- مودال خدمت آرایشگر ---------- *@
+    <Modal IsOpen="showServiceEditor" Title="@(editingServiceId is null ? "افزودن خدمت" : "ویرایش قیمت و مدت")" OnClose="() => showServiceEditor = false">
+        <ErrorAlert Response="serviceError" />
+        <EditForm Model="serviceForm" OnValidSubmit="SaveServiceAsync" FormName="barber-service">
+            <DataAnnotationsValidator />
+            <div class="form-grid">
+                <FormField Label="خدمت" Wide="true">
+                    @if (editingServiceId is null)
+                    {
+                        <InputSelect @bind-Value="serviceForm.ServiceId">
+                            <option value="0">انتخاب کنید…</option>
+                            @foreach (var s in AvailableServices)
+                            {
+                                <option value="@s.Id">@s.Name</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => serviceForm.ServiceId" />
+                    }
+                    else
+                    {
+                        <input value="@(catalog.TryGetValue(serviceForm.ServiceId, out var cs) ? cs.Name : "")" disabled />
+                    }
+                </FormField>
+                <FormField Label="قیمت (ریال)" Hint="@Fmt.Money(serviceForm.PriceValue)">
+                    <InputNumber @bind-Value="serviceForm.PriceValue" dir="ltr" /><ValidationMessage For="() => serviceForm.PriceValue" />
+                </FormField>
+                <FormField Label="مدت (دقیقه)" Hint="@Fmt.Duration(serviceForm.Duration)">
+                    <InputNumber @bind-Value="serviceForm.DurationMinutes" dir="ltr" step="5" /><ValidationMessage For="() => serviceForm.DurationMinutes" />
+                </FormField>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-ghost" @onclick="() => showServiceEditor = false">انصراف</button>
+                <button type="submit" class="btn btn-primary" disabled="@saving">@(saving ? "در حال ذخیره…" : "ذخیره")</button>
+            </div>
+        </EditForm>
+    </Modal>
+
+    @* ---------- مودال بازه‌ی کاری ---------- *@
+    <Modal IsOpen="showScheduleEditor" Title="@(editingScheduleId is null ? "بازه‌ی کاری جدید" : "ویرایش بازه‌ی کاری")" OnClose="() => showScheduleEditor = false">
+        <ErrorAlert Response="scheduleError" />
+        <EditForm Model="scheduleForm" OnValidSubmit="SaveScheduleAsync" FormName="schedule">
+            <DataAnnotationsValidator />
+            <div class="form-grid">
+                <FormField Label="روز هفته" Wide="true">
+                    <InputSelect @bind-Value="scheduleForm.DayOfWeek">
+                        @foreach (var d in Fmt.PersianWeek)
+                        {
+                            <option value="@d">@Fmt.Day(d)</option>
+                        }
+                    </InputSelect>
+                </FormField>
+                <FormField Label="از ساعت">
+                    <input type="time" dir="ltr" @bind="scheduleForm.StartTime" />
+                </FormField>
+                <FormField Label="تا ساعت">
+                    <input type="time" dir="ltr" @bind="scheduleForm.EndTime" />
+                    <ValidationMessage For="() => scheduleForm.EndTime" />
+                </FormField>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="btn btn-ghost" @onclick="() => showScheduleEditor = false">انصراف</button>
+                <button type="submit" class="btn btn-primary" disabled="@saving">@(saving ? "در حال ذخیره…" : "ذخیره")</button>
+            </div>
+        </EditForm>
+    </Modal>
+
+    <ConfirmDialog IsOpen="serviceToDelete is not null" Title="حذف خدمت از آرایشگر" Danger="true" ConfirmText="حذف"
+                   Message="این خدمت از لیست خدمات این آرایشگر حذف شود؟"
+                   OnConfirm="DeleteServiceAsync" OnCancel="() => serviceToDelete = null" />
+
+    <ConfirmDialog IsOpen="scheduleToDelete is not null" Title="حذف بازه‌ی کاری" Danger="true" ConfirmText="حذف"
+                   Message="@(scheduleToDelete is null ? "" : $"بازه‌ی {Fmt.Day(scheduleToDelete.DayOfWeek)} {Fmt.Time(scheduleToDelete.StartTime)} تا {Fmt.Time(scheduleToDelete.EndTime)} حذف شود؟")"
+                   OnConfirm="DeleteScheduleAsync" OnCancel="() => scheduleToDelete = null" />
+}
+
+@code {
+    [Parameter] public long BarberId { get; set; }
+
+    private BarberResponse? barber;
+    private List<BarberServiceResponse> barberServices = [];
+    private Dictionary<long, ServiceResponse> catalog = new();
+    private List<WorkScheduleResponse> schedule = [];
+    private bool loading = true, saving;
+    private ApiResponse? error, editError, serviceError, scheduleError;
+
+    private bool showEdit, showServiceEditor, showScheduleEditor;
+    private UpdateBarberRequest editForm = new();
+    private BarberServiceForm serviceForm = new();
+    private WorkScheduleForm scheduleForm = new();
+    private long? editingServiceId, editingScheduleId;
+    private BarberServiceResponse? serviceToDelete;
+    private WorkScheduleResponse? scheduleToDelete;
+
+    /// <summary>خدماتی از کاتالوگ که هنوز برای این آرایشگر قیمت‌گذاری نشده‌اند</summary>
+    private List<ServiceResponse> AvailableServices => catalog.Values
+        .Where(c => barberServices.All(b => b.ServiceId != c.Id))
+        .OrderBy(c => c.Name).ToList();
+
+    protected override async Task LoadAsync()
+    {
+        loading = true; error = null;
+        var bT = Barbers.GetByIdAsync(BarberId);
+        var sT = BarberServices.GetByBarberAsync(BarberId);
+        var cT = Catalog.GetBySalonAsync(SalonId);
+        var wT = Schedules.GetByBarberAsync(BarberId);
+        await Task.WhenAll(bT, sT, cT, wT);
+
+        if (!bT.Result.Success) { error = bT.Result; loading = false; return; }
+        barber = bT.Result.Data;
+        barberServices = sT.Result.Data ?? [];
+        catalog = (cT.Result.Data ?? []).ToDictionary(x => x.Id);
+        schedule = wT.Result.Data ?? [];
+        loading = false;
+    }
+
+    // ----- Barber -----
+    private void OpenEdit() { editForm = UpdateBarberRequest.From(barber!); editError = null; showEdit = true; }
+
+    private async Task SaveBarberAsync()
+    {
+        saving = true; editError = null;
+        var res = await Barbers.UpdateAsync(BarberId, editForm);
+        saving = false;
+        if (!res.Success) { editError = res; return; }
+        showEdit = false; barber = res.Data ?? barber;
+        Toasts.Success("مشخصات آرایشگر ذخیره شد.");
+    }
+
+    // ----- Barber services -----
+    private void OpenServiceEditor(BarberServiceResponse? bs)
+    {
+        editingServiceId = bs?.Id;
+        serviceForm = bs is null
+            ? new BarberServiceForm()
+            : new BarberServiceForm { ServiceId = bs.ServiceId, PriceValue = bs.PriceValue, DurationMinutes = (int)bs.Duration.TotalMinutes };
+        serviceError = null; showServiceEditor = true;
+    }
+
+    private async Task SaveServiceAsync()
+    {
+        saving = true; serviceError = null;
+        ApiResponse res = editingServiceId is null
+            ? await BarberServices.CreateAsync(new CreateBarberServiceRequest(BarberId, serviceForm.ServiceId, serviceForm.PriceValue, Currency.Irr, serviceForm.Duration))
+            : await BarberServices.UpdateAsync(editingServiceId.Value, new UpdateBarberServiceRequest(serviceForm.PriceValue, Currency.Irr, serviceForm.Duration));
+        saving = false;
+        if (!res.Success) { serviceError = res; return; }
+        showServiceEditor = false;
+        Toasts.Success("خدمت آرایشگر ذخیره شد.");
+        await ReloadServicesAsync();
+    }
+
+    private async Task DeleteServiceAsync()
+    {
+        if (serviceToDelete is null) return;
+        var res = await BarberServices.DeleteAsync(serviceToDelete.Id);
+        serviceToDelete = null;
+        if (!res.Success) { Toasts.Error(res.ErrorMessage!); return; }
+        Toasts.Success("خدمت حذف شد.");
+        await ReloadServicesAsync();
+    }
+
+    private async Task ReloadServicesAsync()
+        => barberServices = (await BarberServices.GetByBarberAsync(BarberId)).Data ?? barberServices;
+
+    // ----- Work schedule -----
+    private void OpenScheduleEditor(WorkScheduleResponse? s)
+    {
+        editingScheduleId = s?.Id;
+        scheduleForm = s is null
+            ? new WorkScheduleForm()
+            : new WorkScheduleForm { DayOfWeek = s.DayOfWeek, StartTime = s.StartTime, EndTime = s.EndTime };
+        scheduleError = null; showScheduleEditor = true;
+    }
+
+    private async Task SaveScheduleAsync()
+    {
+        saving = true; scheduleError = null;
+        ApiResponse res = editingScheduleId is null
+            ? await Schedules.CreateAsync(new CreateWorkScheduleRequest(scheduleForm.StartTime, scheduleForm.EndTime, scheduleForm.DayOfWeek, BarberId))
+            : await Schedules.UpdateAsync(editingScheduleId.Value, new UpdateWorkScheduleRequest(scheduleForm.StartTime, scheduleForm.EndTime, scheduleForm.DayOfWeek));
+        saving = false;
+        if (!res.Success) { scheduleError = res; return; }
+        showScheduleEditor = false;
+        Toasts.Success("ساعت کاری ذخیره شد.");
+        await ReloadScheduleAsync();
+    }
+
+    private async Task DeleteScheduleAsync()
+    {
+        if (scheduleToDelete is null) return;
+        var res = await Schedules.DeleteAsync(scheduleToDelete.Id);
+        scheduleToDelete = null;
+        if (!res.Success) { Toasts.Error(res.ErrorMessage!); return; }
+        Toasts.Success("بازه حذف شد.");
+        await ReloadScheduleAsync();
+    }
+
+    private async Task ReloadScheduleAsync()
+        => schedule = (await Schedules.GetByBarberAsync(BarberId)).Data ?? schedule;
+}

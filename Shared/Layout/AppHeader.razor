@@ -1,0 +1,49 @@
+@inject AuthService Auth
+@inject NavigationManager Nav
+
+<header class="header">
+    <div class="container header-inner">
+        <a class="brand" href="">
+            <span class="brand-mark" aria-hidden="true"></span>
+            <span>BarberHub</span>
+        </a>
+
+        <button class="icon-btn menu-toggle" aria-label="منو" @onclick="() => open = !open">☰</button>
+
+        <nav class="nav @(open ? "nav-open" : "")" @onclick="() => open = false">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">سالن‌ها</NavLink>
+
+            <AuthorizeView Roles="@Roles.SalonAdmin">
+                <NavLink class="nav-link" href="panel">پنل سالن</NavLink>
+            </AuthorizeView>
+            <AuthorizeView Roles="@Roles.PlatformAdmin">
+                <NavLink class="nav-link" href="admin">مدیریت پلتفرم</NavLink>
+            </AuthorizeView>
+
+            <AuthorizeView>
+                <Authorized>
+                    <NavLink class="nav-link" href="account">حساب من</NavLink>
+                    <span class="role-chip">@RoleLabel(context.User.RoleName())</span>
+                    <button class="btn btn-ghost btn-sm" @onclick="LogoutAsync">خروج</button>
+                </Authorized>
+                <NotAuthorized>
+                    <NavLink class="nav-link" href="login">ورود</NavLink>
+                    <a class="btn btn-primary btn-sm" href="register">ثبت‌نام</a>
+                </NotAuthorized>
+            </AuthorizeView>
+        </nav>
+    </div>
+</header>
+
+@code {
+    private bool open;
+
+    private static string RoleLabel(string? role)
+        => Enum.TryParse<UserRole>(role, out var r) ? Fmt.Role(r) : "";
+
+    private async Task LogoutAsync()
+    {
+        await Auth.LogoutAsync();
+        Nav.NavigateTo("", replace: true);
+    }
+}

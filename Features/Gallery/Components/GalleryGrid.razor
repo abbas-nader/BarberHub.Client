@@ -1,0 +1,39 @@
+@* اگر ImageUrls برای FileId موجود باشد تصویر نشان داده می‌شود؛ وگرنه placeholder *@
+@if (Items.Count == 0)
+{
+    <p class="muted">@EmptyText</p>
+}
+else
+{
+    <div class="gallery">
+        @foreach (var g in Items)
+        {
+            <figure class="shot" style="margin:0" @key="g.Id">
+                <div class="img">
+                    @if (ImageUrls.TryGetValue(g.FileId, out var url))
+                    {
+                        <img src="@url" alt="@(g.Caption ?? "تصویر گالری")" loading="lazy" />
+                    }
+                    else
+                    {
+                        <span aria-hidden="true">✂️</span>
+                    }
+                </div>
+                <figcaption class="cap">
+                    <span>@(string.IsNullOrWhiteSpace(g.Caption) ? "بدون توضیح" : g.Caption)</span>
+                    @if (Actions is not null)
+                    {
+                        <div class="row">@Actions(g)</div>
+                    }
+                </figcaption>
+            </figure>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public IReadOnlyList<GalleryResponse> Items { get; set; } = [];
+    [Parameter] public IReadOnlyDictionary<long, string> ImageUrls { get; set; } = new Dictionary<long, string>();
+    [Parameter] public string EmptyText { get; set; } = "هنوز تصویری در گالری نیست.";
+    [Parameter] public RenderFragment<GalleryResponse>? Actions { get; set; }
+}
